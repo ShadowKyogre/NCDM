@@ -7,6 +7,7 @@
 * https://github.com/ShadowKyogre/NCDM/commit/2c1abc5feb0483052d92881fdb914e2890e0c95a
 * https://github.com/ShadowKyogre/NCDM/commit/da45ef1789005105cf0c3516602b322480889cd3
 * https://github.com/ShadowKyogre/NCDM/commit/fbaa8bb9d692d5469de868a96b688b1966fb2cab
+
 0.1 Summary
 =====
 * Allow customization of session list on a per user basis. See sys.cfg for more details.
