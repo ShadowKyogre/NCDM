@@ -25,6 +25,8 @@ Dependencies:
 Optional dependencies:
 * python2-dbus
 * consolekit
+* fbterm
+* fbv
 
 Todo:
 * Port to python 3 once kinks are worked out.
@@ -32,3 +34,5 @@ Todo:
 * Add custom markup support for banner
 * Add more places for theming?
 * Remote login support? Pretty iffy.
+* Code in the portion to limiting users to one login through this
+* Put in that fbterm-bi script from [the Arch Linux fbterm page](https://wiki.archlinux.org/index.php/Fbterm).
