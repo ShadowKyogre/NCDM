@@ -10,6 +10,7 @@ Features:
 * List active sessions and switch between them.
 * Configure commands for hibernate, suspend, shutdown, and restart buttons
 * Color scheme configuration
+* Optional FBTerm and Consolekit support
 
 Dependencies:
 * python2-urwid
