@@ -227,7 +227,7 @@ class NCDMConfig:
 		if os.path.exists(f):
 			return csv_to_list(f)
 		else:
-			return ["Login shell",""]
+			return [("Login shell","")]
 
 	def fill_gui(self, f):
 		if os.path.exists(f):
