@@ -1,0 +1,4 @@
+NCDM
+====
+
+NCurses Display Manager
