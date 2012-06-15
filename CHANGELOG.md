@@ -9,3 +9,4 @@
 * Color scheme configuration
 * Optional FBTerm and Consolekit support
 * Banner message support
+* Always have a login shell command if cli.csv does not exist
