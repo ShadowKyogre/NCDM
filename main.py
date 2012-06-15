@@ -4,7 +4,7 @@ import os
 import glob
 import json
 
-from platform import uname
+from platform import uname,python_version
 from subprocess import check_call, check_output, Popen
 from pwd import getpwnam, getpwall
 from grp import getgrnam
@@ -51,8 +51,8 @@ class SessionTypeItem (urwid.RadioButton):
 		return key
 	'''
 
-class LoginDetails(urwid.Columns):
-	def __init__(self, settings):
+class LoginDetails(urwid.Pile):
+	def __init__(self, settings, greet, font):
 		self.group = []
 		self.gui_items = urwid.SimpleListWalker([])
 		self.cli_items = urwid.SimpleListWalker([])
@@ -86,17 +86,23 @@ class LoginDetails(urwid.Columns):
 		plabel = urwid.Text("Password")
 		utext = urwid.Edit()
 		ptext = urwid.Edit(mask="*")
-		ustuff = urwid.Columns([urwid.AttrWrap(ulabel,'uname','uname'),
-								urwid.AttrWrap(utext,'uname','uname')])
-		pstuff = urwid.Columns([urwid.AttrWrap(plabel,'pw','pw'),
-								urwid.AttrWrap(ptext,'pw','pw')])
+		ustuff = urwid.Columns([urwid.AttrWrap(ulabel,'uname'),
+								urwid.AttrWrap(utext,'uname')])
+		pstuff = urwid.Columns([urwid.AttrWrap(plabel,'pw'),
+								urwid.AttrWrap(ptext,'pw')])
+		ffont=font()
+		banner = urwid.BigText(greet,ffont)
+		banner = urwid.AttrWrap(banner,'banner')
+		banner = urwid.Padding(banner, 'left', width='clip')
+		banner = urwid.Filler(banner,height=ffont.height)
+
+		#banner = urwid.Padding(banner,align='center')
 		login_details = urwid.Pile([ustuff,pstuff,
 									urwid.AttrWrap(urwid.Text("Press enter to log in"),
 									'body','body')])
 		#sessions_box = urwid.Pile([urwid.Text("Sessions"),
 		#							urwid.BoxAdapter(listbox, 40)])
-		urwid.Columns.__init__(self,[urwid.Filler(login_details),
-								tabs])
+		self.__super.__init__([banner, urwid.Columns([urwid.Filler(login_details), tabs])])
 		self.username=utext
 		self.password=ptext
 		urwid.connect_signal(utext, 'change', self.refresh_sessions, settings)
@@ -205,6 +211,17 @@ class NCDMConfig:
 					self.user_confs[user.pw_name]['GUI'] = \
 						self.default['GUI']
 					self.user_confs[user.pw_name]['conf'] = self.sysconf
+
+	def greeter_msg(self):
+		kname,node,kver,kdate,_,_=uname()
+		fullos=check_output(['uname','-o'])[:-1]
+		pyver=python_version()
+		return self.sysconf.get('DEFAULT',
+					'WELCOME').format(**locals())
+
+	def greeter_font(self):
+		return filter(lambda f: f[0] == self.sysconf.get('DEFAULT','FONT'),
+				urwid.get_all_fonts())[0][1]
 
 	def fill_cli(self, f):
 		if os.path.exists(f):
@@ -483,7 +500,7 @@ def main ():
 		#view.set_header(urwid.AttrWrap(urwid.Text(
 		#	'selected: %s' % str(focus)), 'head'))
 
-	login_sel = LoginDetails(settings)
+	login_sel = LoginDetails(settings,settings.greeter_msg(),settings.greeter_font())
 
 	asessions_box = WhoView()
 
@@ -502,7 +519,6 @@ def main ():
 								14, 0, 0, 'center')
 	statusbar = urwid.Text("")
 	footer = urwid.Pile([button_box,urwid.AttrWrap(statusbar,'statusbar','statusbar')])
-
 	#http://lists.excess.org/pipermail/urwid/2008-November/000590.html
 	tabs = TabColumns([urwid.AttrWrap(SelText("Login"), 'tab active', 'focus'),
 					urwid.AttrWrap(SelText("Active Sessions"), 'body', 'focus')],

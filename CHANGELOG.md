@@ -8,3 +8,4 @@
 * Configure commands for hibernate, suspend, shutdown, and restart buttons
 * Color scheme configuration
 * Optional FBTerm and Consolekit support
+* Banner message support

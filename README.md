@@ -11,6 +11,7 @@ Features:
 * Configure commands for hibernate, suspend, shutdown, and restart buttons
 * Color scheme configuration
 * Optional FBTerm and Consolekit support
+* Custom banner to welcome users
 
 Dependencies:
 * python2-urwid
@@ -25,10 +26,9 @@ Optional dependencies:
 * consolekit
 
 Todo:
-* Add a default session to the CLI section that will always launch the user's login shell
-* Port to python 3 once kinks are worked out
+* Add a default session to the CLI section that will always launch the user's login shell.
+* Port to python 3 once kinks are worked out.
 * Register sessions programatically with python-utmp? So far the commented out code using python-utmp doesn't work (http://korpus.juls.savba.sk/~garabik/software/python-utmp/README.txt)
-* Add title support
-* Add custom markup support for title
+* Add custom markup support for banner
 * Add more places for theming?
 * Remote login support? Pretty iffy.
