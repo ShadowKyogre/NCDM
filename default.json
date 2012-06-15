@@ -1,0 +1,12 @@
+[
+	["body","dark cyan", "", "standout"],
+	["focus","dark red", "", "standout"],
+	["head","light red", "black"],
+	["tab","yellow", "", ""],
+	["tab active","yellow", "", "bold"],
+	["button","light green","",""],
+	["btnfocus","light cyan","",""],
+	["header","dark cyan","",""],
+	["pw","dark magenta","",""],
+	["uname","dark blue","",""]
+]
