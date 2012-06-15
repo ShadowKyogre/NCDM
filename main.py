@@ -354,9 +354,9 @@ def main ():
 									check_failed=True
 								check_failed=os.path.exists(img)
 							if check_failed:
-								totalcmd="openvt -ws -- {}".format(session.command)
+								totalcmd="openvt -ws -- {}".format(session.command).trim()
 							else:
-								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command)
+								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command).trim()
 							#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 							#don't clutter the UI with output from what we launched
 							#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
@@ -413,7 +413,7 @@ def main ():
 								])
 							env['XDG_SESSION_COOKIE']=cookie
 						#let startx handle making the authority file
-						totalcmd='startx {} -- {}'.format(session.command,new_d)
+						totalcmd='startx {} -- {}'.format(session.command,new_d).trim()
 						#check_call(['startx','/etc/X11/xinitrc',
 						spid = os.fork()
 						if spid == 0:
