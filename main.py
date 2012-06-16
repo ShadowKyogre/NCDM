@@ -5,7 +5,7 @@ import glob
 import json
 
 from platform import uname,python_version
-from subprocess import check_call, check_output, Popen
+from subprocess import check_call, check_output, Popen, CalledProcessError
 from pwd import getpwnam, getpwall
 from grp import getgrnam
 from spwd import getspnam
@@ -212,12 +212,18 @@ class NCDMConfig:
 						self.default['GUI']
 					self.user_confs[user.pw_name]['conf'] = self.sysconf
 
+	def let_root(self):
+		return self.sysconf.getboolean('DEFAULT','ALLOW_ROOT')
+
 	def greeter_msg(self):
 		kname,node,kver,kdate,_,_=uname()
 		fullos=check_output(['uname','-o'])[:-1]
 		pyver=python_version()
 		return self.sysconf.get('DEFAULT',
 					'WELCOME').format(**locals())
+
+	def login_once(self):
+		return self.sysconf.get('DEFAULT','LOGIN_ONCE').split(':')
 
 	def greeter_font(self):
 		return filter(lambda f: f[0] == self.sysconf.get('DEFAULT','FONT'),
@@ -309,9 +315,21 @@ def main ():
 	def login(username, password, session, ck, fb, img):
 		#check here for root login and bail out if needed
 		#check here for other existing login and switch out
+		if username == 'root' and not settings.let_root():
+			statusbar.set_text("Root login is forbidden!")
+			return
+		if username in settings.login_once():
+			asessions_box.who_list.body.refresh()
+			entries = asessions_box.who_list.body.entries
+			my_entries = [ s for s in entries if re.match(username,s) ]
+			if my_entries:
+				statusbar.set_text(("Sorry, {}, you're already logged in."
+							"\nLook at the active sessions"
+							" panel for your session").format(username))
+				return
 		statusbar.set_text("Authenticating login...")
-		encrypted_password=getspnam(username).sp_pwd
-		encrypted_attempt=crypt(password,encrypted_password)
+		encrypted_password = getspnam(username).sp_pwd
+		encrypted_attempt = crypt(password,encrypted_password)
 		if encrypted_attempt == encrypted_password:
 			if session is None:
 				statusbar.set_text("Login is correct, but there are no valid sessions")
@@ -348,22 +366,31 @@ def main ():
 							if fb:
 								try:
 									check_call(['which','fbterm'])
-									check_call(['which','fbv'])
-									check_call(['which','fbterm-bi'])
-								except:
+								except CalledProcessError,e:
 									check_failed=True
-								check_failed=os.path.exists(img)
+								try:
+									check_call(['which','fbv'])
+								except CalledProcessError,e:
+									check_failed=True
+
+								try:
+									check_call(['which','fbterm-bi'])
+								except CalledProcessError:
+									check_failed=True
+
+								if not check_failed:
+									check_failed=os.path.exists(img)
 							if check_failed:
-								totalcmd="openvt -ws -- {}".format(session.command).trim()
+								totalcmd="openvt -ws -- {}".format(session.command).strip()
 							else:
-								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command).trim()
+								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command).strip()
 							#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 							#don't clutter the UI with output from what we launched
 							#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
 							with open(os.devnull, 'rb') as shutup:
 								login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 												env=env,cwd=usr.pw_dir,close_fds=True,
-												stdout=shutup, stderr=shutup,
+												stdout=shutup,stderr=shutup,
 												preexec_fn=drop_privs(username))
 								#print("Waiting for process to finish")
 								login_prs.wait()
@@ -413,7 +440,7 @@ def main ():
 								])
 							env['XDG_SESSION_COOKIE']=cookie
 						#let startx handle making the authority file
-						totalcmd='startx {} -- {}'.format(session.command,new_d).trim()
+						totalcmd='startx {} -- {}'.format(session.command,new_d)
 						#check_call(['startx','/etc/X11/xinitrc',
 						spid = os.fork()
 						if spid == 0:
@@ -422,7 +449,7 @@ def main ():
 							with open(os.devnull, 'rb') as shutup:
 								login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 											cwd=usr.pw_dir, env=env, close_fds=True,
-											stdout=shutup,stderr=shutup,
+											stdout=shutup,strerr=shutup,
 											preexec_fn=drop_privs(username))
 								login_prs.wait()
 								os._exit(login_prs.returncode)
