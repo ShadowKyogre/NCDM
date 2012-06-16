@@ -258,6 +258,7 @@ def make_child_env(username):
 	env['LOGNAME']=usr.pw_name
 	env['USER']=usr.pw_name
 	env['PATH']=os.getenv('PATH')
+	env['TERM']=os.getenv('TERM')
 	#http://groups.google.com/group/alt.os.linux.debian/browse_thread/thread/1b5ec66456373b99
 	env['MAIL']=os.path.join(parse_login_defs().get('MAIL_DIR'),usr.pw_name)
 	#XAUTHORITY and DISPLAY are X dependent!
@@ -348,7 +349,8 @@ def main ():
 					ttytxt='tty{}'.format(next_console)
 					if session.tag == 'C':
 						usr,env=make_child_env(username)
-						env['TERM']='linux'
+						#env['TERM']='linux'
+						# let the wrapper handle setting TERM
 						#print("Setting up environment for {}".format(username))
 						prepare_tty(username,next_console)
 						#print("Making {} own {}".format(username, ttytxt))
