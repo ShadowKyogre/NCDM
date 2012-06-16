@@ -382,7 +382,7 @@ def main ():
 									check_failed=True
 
 								if not check_failed:
-									check_failed=os.path.exists(img)
+									check_failed=not os.path.exists(img)
 							if check_failed:
 								totalcmd="openvt -ws -- {}".format(session.command).strip()
 							else:
