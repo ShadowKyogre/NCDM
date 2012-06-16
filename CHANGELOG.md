@@ -3,6 +3,7 @@
 * Disable root login if needed
 * Allow select users to only log in once
 * Fix fbterm detection
+* Put in that csv module import I forgot
 
 0.1 (06/14/2012)
 ====

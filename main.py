@@ -3,6 +3,7 @@ import re
 import os
 import glob
 import json
+import csv
 
 from platform import uname,python_version
 from subprocess import check_call, check_output, Popen, CalledProcessError

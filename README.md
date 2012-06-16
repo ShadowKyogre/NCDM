@@ -18,7 +18,7 @@ Features:
 
 Dependencies:
 * python2-urwid
-* Core python modules: crypt, spwd, pwd, grp, os, re, subprocess, platform, glob
+* Core python modules: crypt, spwd, pwd, grp, os, re, subprocess, platform, glob, csv
 * xorg-xinit
 * xorg-sessreg
 * coreutils
