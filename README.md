@@ -15,6 +15,7 @@ Features:
 * Optional FBTerm and Consolekit support
 * Custom banner to welcome users
 * Always has an option for a login shell if cli.csv does not exist.
+* Allow setting background image for NCDM if fbterm is told to be used
 
 Dependencies:
 * python2-urwid
