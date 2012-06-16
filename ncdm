@@ -1,7 +1,16 @@
 #!/bin/bash
 #modified from http://www.linuxjournal.com/article/3121
+
 exec 0</dev/${1} 1>/dev/${1} 2>&1
 shift
 export TERM=${1}
 shift
-exec python2 /usr/share/ncdm/main.py $*
+if [[ -f "${1}" && ${TERM} == "fbterm" ]];then
+	img="${1}"
+	shift
+	exec fbterm-bi ${img} python2 /usr/share/ncdm/main.py $*
+elif [[ ${TERM} == "fbterm" ]];then
+	exec fbterm python2 /usr/share/ncdm/main.py $*
+else
+	exec python2 /usr/share/ncdm/main.py $*
+fi
