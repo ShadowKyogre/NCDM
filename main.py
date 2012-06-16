@@ -450,7 +450,7 @@ def main ():
 							with open(os.devnull, 'rb') as shutup:
 								login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 											cwd=usr.pw_dir, env=env, close_fds=True,
-											stdout=shutup,strerr=shutup,
+											stdout=shutup,stderr=shutup,
 											preexec_fn=drop_privs(username))
 								login_prs.wait()
 								os._exit(login_prs.returncode)
