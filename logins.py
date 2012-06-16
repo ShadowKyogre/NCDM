@@ -103,7 +103,8 @@ class WhoWalker(urwid.ListWalker):
 			x_line=filter(lambda s: ' {}'.format(device) in s,
 					check_output(['ps','p',x_pids]).split('\n')[:-1])[0]
 			#terminal=check_output('cut -d\  -f4'.format(device),shell=True)[:-1]
-			terminal=x_line.split(' ')[3][-1]
+			#terminal=x_line.split(' ')[3][-1]
+			terminal=re.findall('^[0-9]* (tty[0-9]*)[ ]*',x_line)[0][3:]
 		else:
 			terminal=device[3:]
 		#return WhoItem(username,device,e.ut_pid,e.ut_host,e.ut_tv[0],terminal)
