@@ -1,3 +1,13 @@
+0.1.3 (06/16/2012)
+====
+* Slight fix to fbterm support
+* Allow setting TERM through the wrapper that goes in inittab
+* Additional fix to that detection relations
+
+0.1.2 (06/16/2012)
+====
+* Try to fix detecting relations between X displays and ttys
+
 0.1.1 (06/15/2012)
 ====
 * Disable root login if needed
