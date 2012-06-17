@@ -336,7 +336,7 @@ def main ():
 
 								if not check_failed:
 									check_failed=not os.path.exists(img)
-							if check_failed:
+							if not fb or check_failed:
 								totalcmd="openvt -ws -- {}".format(session.command).strip()
 							else:
 								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command).strip()
@@ -385,7 +385,7 @@ def main ():
 						if ck:
 							if None in (dbus,manager,manager_iface):
 								check_failed=True
-						if not check_failed:
+						if not check_failed and ck:
 							#open a consolekit session
 							cookie = manager_iface.OpenSessionWithParameters([
 								('unix-user',usr.pw_uid),
@@ -396,7 +396,7 @@ def main ():
 								])
 							env['XDG_SESSION_COOKIE']=cookie
 						#let startx handle making the authority file
-						totalcmd='startx {} -- {}'.format(session.command,new_d)
+						totalcmd='startx {} -- {}'.format(session.command,new_d).strip()
 						#check_call(['startx','/etc/X11/xinitrc',
 						spid = os.fork()
 						if spid == 0:
