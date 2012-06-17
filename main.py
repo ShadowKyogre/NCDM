@@ -45,28 +45,14 @@ class SessionTypeItem (urwid.RadioButton):
 		self.command = command
 		self.name = name
 		self.__super.__init__(group,self.name)
-	'''
-	def selectable (self):
-		return True
-	def keypress(self, size, key):
-		return key
-	'''
 
 class LoginDetails(urwid.Pile):
 	def __init__(self, settings, greet, font):
 		self.group = []
 		self.gui_items = urwid.SimpleListWalker([])
 		self.cli_items = urwid.SimpleListWalker([])
-		'''
-		for i in sessions:
-			if sessions[i][0] == 'C':
-				cli_items.append(SessionTypeItem(self.group,sessions[i][0],sessions[i][1],i))
-			elif sessions[i][0] == 'X':
-				gui_items.append(SessionTypeItem(self.group,sessions[i][0],sessions[i][1],i))
-			else:
-				exit(0)
-		'''
-			#header = urwid.AttrMap(urwid.Text('selected:'), 'head')
+
+		#header = urwid.AttrMap(urwid.Text('selected:'), 'head')
 		self.gui_listbox = urwid.ListBox(self.gui_items)
 		#add widget for consolekit checkbox
 		self.cli_listbox = urwid.ListBox(self.cli_items)
@@ -246,7 +232,6 @@ class NCDMConfig:
 this forks two times, one for running a process
 dedicated to stopping sessions started by it, and
 another for launching the process
-#screen acts funky after a session is started
 '''
 
 def make_child_env(username):
@@ -266,16 +251,10 @@ def make_child_env(username):
 
 def drop_privs(username):
 	def result():
-		#print("Changing to {}".format(username))
-		#print("UID: {}, GID: {}".format(os.getuid(),os.getgid()))
-		#print("EUID: {}, EGID: {}".format(os.geteuid(),os.getegid()))
 		usr = getpwnam(username)
 		os.initgroups(username,usr.pw_gid)
 		os.setgid(usr.pw_gid)
 		os.setuid(usr.pw_uid)
-		#print("Changed creds")
-		#print("UID: {}, GID: {}".format(os.getuid(),os.getgid()))
-		#print("EUID: {}, EGID: {}".format(os.geteuid(),os.getegid()))
 	return result
 	#we only want to temporarily drop the priveleges
 	#http://comments.gmane.org/gmane.comp.web.paste.user/1641
@@ -292,27 +271,6 @@ def restore_tty(n):
 	prepare_tty('root',n)
 
 def main ():
-	'''
-	def fix_arrows(key,raw):
-		write_this="Key: {}, Raw: {}".format(key,raw)
-		statusbar.set_text(write_this)
-		f=open('/tmp/rawr.txt','a')
-		f.write(write_this)
-		f.write('\n')
-		f.close()
-		if len(key) == 0:
-			return key
-		if key[0] == "meta C" or key == ['[','right']:
-			return "right"
-		elif key[0] == "meta D" or key == ['[','left']:
-			return "left"
-		elif key[0] == "meta A" or key == ['[','up']:
-			return "up"
-		elif key[0] == "meta B" or key == ['[','down']:
-			return "down"
-		else:
-			return key
-	'''
 	settings = NCDMConfig()
 	def login(username, password, session, ck, fb, img):
 		#check here for root login and bail out if needed
@@ -356,11 +314,6 @@ def main ():
 						#print("Making {} own {}".format(username, ttytxt))
 						#we have to do slightly more work for normal ttys
 						#see http://www.linuxmisc.com/22-unix-security/d7e7d987a8860b8f.htm for more details
-						'''
-						check_call(['openvt','-ws','--',
-									'su',username,'-c',session.command],
-									env=env,cwd=usr.pw_dir,close_fds=True)
-						'''
 						spid = os.fork()
 						if spid == 0:
 							os.setsid()
@@ -430,7 +383,7 @@ def main ():
 						check_failed=False
 						cookie=''
 						if ck:
-							if dbus is None or manager_iface is None:
+							if None in (dbus,manager,manager_iface):
 								check_failed=True
 						if not check_failed:
 							#open a consolekit session

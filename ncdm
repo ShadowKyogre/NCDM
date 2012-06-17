@@ -3,8 +3,17 @@
 
 exec 0</dev/${1} 1>/dev/${1} 2>&1
 shift
+#pretty up the tty under it
+clear
+
+#transfer the TERM variable specified
 export TERM=${1}
 shift
+
+#try to grab the right LC_CTYPE
+. /etc/locale.conf
+export LC_CTYPE=${LC_CTYPE:-C}
+
 if [[ -f "${1}" && ${TERM} == "fbterm" ]];then
 	img="${1}"
 	shift
