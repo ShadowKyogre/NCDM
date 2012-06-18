@@ -1,6 +1,7 @@
 0.1.4 (06/17/2012)
 ====
 * Slight fix regarding framebuffer and consolekit enabling
+* Some code cleanup
 
 0.1.3 (06/16/2012)
 ====
