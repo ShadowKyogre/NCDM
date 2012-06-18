@@ -370,7 +370,7 @@ def cli_session(username,tty,cmd,fb,img):
 		check_call(['sessreg','-a','-l',ttytxt,username])
 		#register now that we have the PID
 		#print("Registering session for {} on {}".format(username, ttytxt))
-		status=os.waitpid(sid,os.P_WAIT)[1]
+		status=os.waitpid(pid,os.P_WAIT)[1]
 		#print("Child finished")
 		#print("Restoring priveleges")
 		restore_tty(next_console)
