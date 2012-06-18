@@ -239,6 +239,7 @@ def make_child_env(username):
 	env = {}
 	env['HOME']=usr.pw_dir
 	env['PWD']=usr.pw_dir
+	# let the wrapper handle setting TERM
 	env['SHELL']=usr.pw_shell
 	env['LOGNAME']=usr.pw_name
 	env['USER']=usr.pw_name
@@ -250,18 +251,15 @@ def make_child_env(username):
 	return usr,env
 
 def drop_privs(username):
+	#we only want to temporarily drop the priveleges
+	#http://comments.gmane.org/gmane.comp.web.paste.user/1641
+	#http://stackoverflow.com/questions/1770209/run-child-processes-as-different-user-from-a-long-running-process
 	def result():
 		usr = getpwnam(username)
 		os.initgroups(username,usr.pw_gid)
 		os.setgid(usr.pw_gid)
 		os.setuid(usr.pw_uid)
 	return result
-	#we only want to temporarily drop the priveleges
-	#http://comments.gmane.org/gmane.comp.web.paste.user/1641
-	#http://stackoverflow.com/questions/1770209/run-child-processes-as-different-user-from-a-long-running-process
-
-def restore_privs():
-	drop_privs('root')()
 
 def prepare_tty(username,n):
 	ttypath=os.path.join("/dev","tty{}".format(n))
@@ -269,6 +267,117 @@ def prepare_tty(username,n):
 
 def restore_tty(n):
 	prepare_tty('root',n)
+
+def gui_session(username,tty,cmd,ck):
+	ttytxt='tty{}'.format(tty)
+	usr,env=make_child_env(username)
+	active_xs=glob.glob('/tmp/.X*-lock')
+	if len(active_xs) > 0:
+		last_d=os.path.basename(active_xs[-1]).replace('-lock','')[2:]
+	else:
+		last_d=-1
+	new_d=":{}".format(int(last_d)+1)
+	env['DISPLAY']=new_d #we need this only for sessreg purposes
+	env['TERM']='xterm'
+	check_failed=False
+	cookie=''
+	if ck:
+		if None in (dbus,manager,manager_iface):
+			check_failed=True
+	if not check_failed and ck:
+		#open a consolekit session
+		cookie = manager_iface.OpenSessionWithParameters([
+			('unix-user',usr.pw_uid),
+			('x11-display',new_d),
+			('x11-display-device',os.path.join('/dev',ttytxt)),
+			('is-local',True),
+			('display-device','')
+			])
+		env['XDG_SESSION_COOKIE']=cookie
+	#let startx handle making the authority file
+	totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
+	#check_call(['startx','/etc/X11/xinitrc',
+	pid = os.fork()
+	if pid == 0:
+		os.setsid()
+		#do a check for consolekit goodiness
+		with open(os.devnull, 'rb') as shutup:
+			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
+						cwd=usr.pw_dir, env=env, close_fds=True,
+						stdout=shutup,stderr=shutup,
+						preexec_fn=drop_privs(username))
+			login_prs.wait()
+			os._exit(login_prs.returncode)
+	else:
+		#this'll be called after the process is done
+		#register here since we have the PID
+		check_call(['sessreg','-a','-l', new_d, username])
+		#add_utmp_entry(username, new_d, spid)
+		status=os.waitpid(pid,os.P_WAIT)[1]
+		if not check_failed and ck:
+			closed = manager_iface.CloseSession(cookie)
+			del env['XDG_SESSION_COOKIE']
+		#remove_utmp_entry(new_d)
+		check_call(['sessreg','-d','-l', new_d, username])
+		os._exit(status)
+
+def cli_session(username,tty,cmd,fb,img):
+	ttytxt='tty{}'.format(tty)
+	usr,env=make_child_env(username)
+	prepare_tty(username,tty)
+	pid = os.fork()
+	if pid == 0:
+		os.setsid()
+		#do a check for fbterm goodiness
+		check_failed=False
+		if fb:
+			try:
+				check_call(['which','fbterm'])
+			except CalledProcessError,e:
+				check_failed=True
+
+			try:
+				check_call(['which','fbv'])
+			except CalledProcessError,e:
+				check_failed=True
+
+			try:
+				check_call(['which','fbterm-bi'])
+			except CalledProcessError:
+				check_failed=True
+
+			if not check_failed:
+				check_failed=not os.path.exists(img)
+		if not fb or check_failed:
+			totalcmd="openvt -ws -- {}".format(cmd).strip()
+		else:
+			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
+		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
+		#don't clutter the UI with output from what we launched
+		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
+		with open(os.devnull, 'rb') as shutup:
+			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
+							env=env,cwd=usr.pw_dir,close_fds=True,
+							stdout=shutup,stderr=shutup,
+							preexec_fn=drop_privs(username))
+			#print("Waiting for process to finish")
+			login_prs.wait()
+			#print("Finished with {}".format(login_prs.returncode))
+			#we need to wait for this to finish to log the entry properly
+			#this'll be called after the process is done
+			os._exit(login_prs.returncode)
+	else:
+		check_call(['sessreg','-a','-l',ttytxt,username])
+		#register now that we have the PID
+		#print("Registering session for {} on {}".format(username, ttytxt))
+		status=os.waitpid(sid,os.P_WAIT)[1]
+		#print("Child finished")
+		#print("Restoring priveleges")
+		restore_tty(next_console)
+		#print("Restoring tty ownership")
+		check_call(['sessreg','-d','-l',ttytxt, username])
+		#print("Deregistering session for {} on {}".format(username, ttytxt))
+		os._exit(status)
 
 def main ():
 	settings = NCDMConfig()
@@ -297,149 +406,36 @@ def main ():
 			next_console=check_output(['fgconsole','-n'])[:-1]
 			statusbar.set_text(("Initializing session "
 			"on console {}...").format(next_console))
-			if session.tag in 'CX':
+			#now, use the C or X tags to complete the login
+			if len(session.tag) > 0 and session.tag in "CX":
 				pid = os.fork()
 				if pid == 0:
 					#separate from parent
 					os.setsid()
 					#problem: session is deregistered when login manager exits
 					#input is also funky because the stdin is stolen from the manager
-					ttytxt='tty{}'.format(next_console)
 					if session.tag == 'C':
-						usr,env=make_child_env(username)
-						#env['TERM']='linux'
-						# let the wrapper handle setting TERM
-						#print("Setting up environment for {}".format(username))
-						prepare_tty(username,next_console)
-						#print("Making {} own {}".format(username, ttytxt))
-						#we have to do slightly more work for normal ttys
-						#see http://www.linuxmisc.com/22-unix-security/d7e7d987a8860b8f.htm for more details
-						spid = os.fork()
-						if spid == 0:
-							os.setsid()
-							#do a check for fbterm goodiness
-							check_failed=False
-							if fb:
-								try:
-									check_call(['which','fbterm'])
-								except CalledProcessError,e:
-									check_failed=True
-								try:
-									check_call(['which','fbv'])
-								except CalledProcessError,e:
-									check_failed=True
-
-								try:
-									check_call(['which','fbterm-bi'])
-								except CalledProcessError:
-									check_failed=True
-
-								if not check_failed:
-									check_failed=not os.path.exists(img)
-							if not fb or check_failed:
-								totalcmd="openvt -ws -- {}".format(session.command).strip()
-							else:
-								totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,session.command).strip()
-							#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
-							#don't clutter the UI with output from what we launched
-							#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
-							with open(os.devnull, 'rb') as shutup:
-								login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
-												env=env,cwd=usr.pw_dir,close_fds=True,
-												stdout=shutup,stderr=shutup,
-												preexec_fn=drop_privs(username))
-								#print("Waiting for process to finish")
-								login_prs.wait()
-								#print("Finished with {}".format(login_prs.returncode))
-								#we need to wait for this to finish to log the entry properly
-								#this'll be called after the process is done
-								os._exit(login_prs.returncode)
-						else:
-							check_call(['sessreg','-a','-l',ttytxt,username])
-							#register now that we have the PID
-							#print("Registering session for {} on {}".format(username, ttytxt))
-							status=os.waitpid(spid,os.P_WAIT)[1]
-							#print("Child finished")
-							#restore_privs()
-							#print("Restoring priveleges")
-							restore_tty(next_console)
-							#print("Restoring tty ownership")
-							check_call(['sessreg','-d','-l',ttytxt, username])
-							#print("Deregistering session for {} on {}".format(username, ttytxt))
-							os._exit(status)
-						#check_call(['sessreg','-d','-l',ttytxt, username.edit_text])
-						#exit the child thread?
+						cli_session(username,next_console,session.command,fb,img)
+						#kill the daemon process that launched these in here
 					elif session.tag == 'X':
-						usr,env=make_child_env(username)
-						#get next empty display
-						active_xs=glob.glob('/tmp/.X*-lock')
-						if len(active_xs) > 0:
-							last_d=os.path.basename(active_xs[-1]).replace('-lock','')[2:]
-						else:
-							last_d=-1
-						new_d=":{}".format(int(last_d)+1)
-						env['DISPLAY']=new_d #we need this only for sessreg purposes
-						env['TERM']='xterm'
-						check_failed=False
-						cookie=''
-						if ck:
-							if None in (dbus,manager,manager_iface):
-								check_failed=True
-						if not check_failed and ck:
-							#open a consolekit session
-							cookie = manager_iface.OpenSessionWithParameters([
-								('unix-user',usr.pw_uid),
-								('x11-display',new_d),
-								('x11-display-device',os.path.join('/dev',ttytxt)),
-								('is-local',True),
-								('display-device','')
-								])
-							env['XDG_SESSION_COOKIE']=cookie
-						#let startx handle making the authority file
-						totalcmd='startx {} -- {}'.format(session.command,new_d).strip()
-						#check_call(['startx','/etc/X11/xinitrc',
-						spid = os.fork()
-						if spid == 0:
-							os.setsid()
-							#do a check for consolekit goodiness
-							with open(os.devnull, 'rb') as shutup:
-								login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
-											cwd=usr.pw_dir, env=env, close_fds=True,
-											stdout=shutup,stderr=shutup,
-											preexec_fn=drop_privs(username))
-								login_prs.wait()
-								os._exit(login_prs.returncode)
-						else:
-							#this'll be called after the process is done
-							#register here since we have the PID
-							check_call(['sessreg','-a','-l', new_d, username])
-							#add_utmp_entry(username, new_d, spid)
-							status=os.waitpid(spid,os.P_WAIT)[1]
-							if not check_failed:
-								closed = manager_iface.CloseSession(cookie)
-								del env['XDG_SESSION_COOKIE']
-							#remove_utmp_entry(new_d)
-							check_call(['sessreg','-d','-l', new_d, username])
-							os._exit(status)
+						gui_session(username,next_console,session.command,ck)
+						#kill the daemon process that launched these in here
+					else:
+						os._exit(1)
+						#invalid tag
 				else:
 					pass
 					'''
-					child_pr=os.waitpid(pid,os.P_NOWAIT)
-					statusbar.set_text(str(child_pr))
-					ss=os.fdopen(fd)
-					f=open('/tmp/rawr.txt','a')
-					f.write("Status: {}".format(child_pr))
-					f.write(", output: {}".format(ss.read()))
-					f.write('\n___________\n')
-					f.close()
-					ss.close()
+					ran = os.waitpid(pid,os.P_NOWAIT)
+					if ran == pid:
+						statusbar.set_text("Login command succeeded")
+					else:
+						statusbar.set_text("Login command failed")
 					'''
 			else:
 				statusbar.set_text('Invalid session tag {}'.format(session.tag))
-						#kill the daemon process
 		else:
-			statusbar.set_text("Login failed, password is incorrect")
-		#now, use the C or X tags to complete the login
+			statusbar.set_text("Login details are incorrect")
 
 	def power_button(button, user_data):
 		statusbar.set_text("Doing {} now...".format(button.label.lower()))
@@ -470,11 +466,11 @@ def main ():
 							login_sel.password.edit_text,
 							active_session, login_sel.ck_check.state,
 							login_sel.fb_check.state, img)
-					login_sel.username.edit_text=""
-					login_sel.password.edit_text=""
+				statusbar.set_text("")
+				login_sel.username.edit_text=""
+				login_sel.password.edit_text=""
 			elif panel is asessions_box:
 				active_session=asessions_box.who_list.get_focus()[0]
-				statusbar.set_text(str(active_session.username))
 				try:
 					check_call(['chvt',str(active_session.tty)])
 				except Exception, e:
@@ -500,6 +496,7 @@ def main ():
 								urwid.AttrWrap(hb_button,'button','btnfocus'),
 								urwid.AttrWrap(sp_button,'button','btnfocus')], \
 								14, 0, 0, 'center')
+	
 	statusbar = urwid.Text("")
 	footer = urwid.Pile([button_box,urwid.AttrWrap(statusbar,'statusbar','statusbar')])
 	#http://lists.excess.org/pipermail/urwid/2008-November/000590.html
@@ -513,7 +510,3 @@ def main ():
 
 if __name__ == '__main__':
 	main()
-
-'''
-'''
-
