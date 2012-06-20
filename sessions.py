@@ -40,7 +40,7 @@ if PAM is not None:
 				return None
 		return resp
 
-def delete_session(username,tty_or_x):
+def delete_session(username,tty_or_x,auth=None):
 	if PAM is None:
 		try:
 			check_call(['sessreg','-d','-l', tty_or_x, username])
@@ -49,9 +49,10 @@ def delete_session(username,tty_or_x):
 		else:
 			return True
 	else:
-		auth = PAM.pam()
-		auth.start('ncdm')
-		auth.set_item(PAM.PAM_USER, username)
+		if auth is None:
+			auth = PAM.pam()
+			auth.start('ncdm')
+			auth.set_item(PAM.PAM_USER, username)
 		auth.set_item(PAM.PAM_TTY,tty_or_x)
 		auth.set_item(PAM.PAM_CONV, mute_conv)
 		try:
@@ -61,7 +62,7 @@ def delete_session(username,tty_or_x):
 		else:
 			return True
 
-def register_session(username,tty_or_x,try_creds=False):
+def register_session(username,tty_or_x,auth=None,try_creds=True):
 	if PAM is None:
 		try:
 			check_call(['sessreg','-a','-l', tty_or_x, username])
@@ -70,9 +71,10 @@ def register_session(username,tty_or_x,try_creds=False):
 		else:
 			return True
 	else:
-		auth = PAM.pam()
-		auth.start('ncdm')
-		auth.set_item(PAM.PAM_USER, username)
+		if auth is None:
+			auth = PAM.pam()
+			auth.start('ncdm')
+			auth.set_item(PAM.PAM_USER, username)
 		auth.set_item(PAM.PAM_TTY,tty_or_x)
 		auth.set_item(PAM.PAM_CONV, mute_conv)
 		try:
@@ -84,7 +86,7 @@ def register_session(username,tty_or_x,try_creds=False):
 		else:
 			return True
 
-def check_avail(username):
+def check_avail(username,auth=None):
 	#match expiry
 	if PAM is None:
 		usr = getspnam(username)
@@ -155,9 +157,10 @@ def check_avail(username):
 
 	else:
 		msgs=[]
-		auth = PAM.pam()
-		auth.start('ncdm')
-		auth.set_item(PAM.PAM_USER, username)
+		if auth is None:
+			auth = PAM.pam()
+			auth.start('ncdm')
+			auth.set_item(PAM.PAM_USER, username)
 		auth.set_item(PAM.PAM_CONV, gather_msgs)
 		auth.setUserData(msgs)
 		err_map={PAM.PAM_ACCT_EXPIRED:3,
@@ -176,19 +179,20 @@ def check_pw(username,password,nopw=True):
 	'''
 	nopw only has an effect when PAM is not enabled. 
 	Otherwise, let PAM handle that
+	returns the auth object, if applicable
 	'''
 	if PAM is None:
 		try:
 			encrypted_password = getspnam(username).sp_pwd
 		except KeyError as e:
-			return False
+			return None,False
 		encrypted_attempt = crypt(password,encrypted_password)
 		#allow no passwd logins by default
 		#we do not need to check ! or * entries
 		#since they will never match
 		if len(encrypted_password) == 0 and nopw is False:
-			return False
-		return encrypted_attempt == encrypted_password
+			return None,False
+		return None,(encrypted_attempt == encrypted_password)
 	else:
 		def conv(auth, query_list, userData):
 			resp = []
@@ -204,6 +208,6 @@ def check_pw(username,password,nopw=True):
 		try:
 			auth.authenticate()
 		except PAM.error as e:
-			return False
+			return auth,False
 		else:
-			return True
+			return auth,True
