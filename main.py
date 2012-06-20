@@ -272,7 +272,7 @@ def gui_session(username,tty,cmd,ck):
 	usr,env=make_child_env(username)
 	active_xs=glob.glob('/tmp/.X*-lock')
 	if len(active_xs) > 0:
-		last_d=os.path.basename(active_xs[-1]).replace('-lock','')[2:]
+		last_d=os.path.basename(active_xs[0]).replace('-lock','')[2:]
 	else:
 		last_d=-1
 	new_d=":{}".format(int(last_d)+1)
@@ -311,14 +311,12 @@ def gui_session(username,tty,cmd,ck):
 		#this'll be called after the process is done
 		#register here since we have the PID
 		sessions.register_session(username,new_d)
-		#check_call(['sessreg','-a','-l', new_d, username])
 		#add_utmp_entry(username, new_d, spid)
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		if not check_failed and ck:
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
 		#remove_utmp_entry(new_d)
-		#check_call(['sessreg','-d','-l', new_d, username])
 		sessions.delete_session(username,new_d)
 		os._exit(status)
 
@@ -370,7 +368,6 @@ def cli_session(username,tty,cmd,fb,img):
 			#this'll be called after the process is done
 			os._exit(login_prs.returncode)
 	else:
-		#check_call(['sessreg','-a','-l',ttytxt,username])
 		sessions.register_session(username,ttytxt)
 		#register now that we have the PID
 		#print("Registering session for {} on {}".format(username, ttytxt))
@@ -379,7 +376,6 @@ def cli_session(username,tty,cmd,fb,img):
 		#print("Restoring priveleges")
 		restore_tty(tty)
 		#print("Restoring tty ownership")
-		#check_call(['sessreg','-d','-l',ttytxt, username])
 		sessions.delete_session(username,ttytxt)
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
