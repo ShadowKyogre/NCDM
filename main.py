@@ -351,6 +351,8 @@ def cli_session(username,tty,cmd,fb,img):
 		if not fb or check_failed:
 			totalcmd="openvt -ws -- {}".format(cmd).strip()
 		else:
+			env['TERM']='fbterm'
+			#override TERM variable if fbterm support is officially enabled
 			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
 		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 		#don't clutter the UI with output from what we launched
