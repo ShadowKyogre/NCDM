@@ -2,7 +2,7 @@ try:
 	import PAM
 except ImportError as e:
 	PAM = None
-PAM = None
+#PAM = None
 import time
 from subprocess import check_call, CalledProcessError
 from spwd import getspnam
@@ -43,7 +43,7 @@ if PAM is not None:
 def delete_session(username,tty_or_x):
 	if PAM is None:
 		try:
-			check_call(['sessreg','-d','-l', new_d, username])
+			check_call(['sessreg','-d','-l', tty_or_x, username])
 		except CalledProcessError as e:
 			return False
 		else:
@@ -64,7 +64,7 @@ def delete_session(username,tty_or_x):
 def register_session(username,tty_or_x,try_creds=False):
 	if PAM is None:
 		try:
-			check_call(['sessreg','-a','-l', new_d, username])
+			check_call(['sessreg','-a','-l', tty_or_x, username])
 		except CalledProcessError as e:
 			return False
 		else:
