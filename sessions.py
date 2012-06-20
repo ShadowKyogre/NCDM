@@ -2,9 +2,11 @@ try:
 	import PAM
 except ImportError as e:
 	PAM = None
+PAM = None
 import time
 from subprocess import check_call, CalledProcessError
 from spwd import getspnam
+from crypt import crypt
 
 if PAM is not None:
 	def mute_conv(auth, query_list, userData):
@@ -184,7 +186,7 @@ def check_pw(username,password,nopw=True):
 		#allow no passwd logins by default
 		#we do not need to check ! or * entries
 		#since they will never match
-		if len(usr.sp_pwd) == 0 and nopw is False:
+		if len(encrypted_password) == 0 and nopw is False:
 			return False
 		return encrypted_attempt == encrypted_password
 	else:

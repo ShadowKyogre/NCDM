@@ -6,11 +6,9 @@ import json
 import csv
 
 from platform import uname,python_version
-from subprocess import check_call, check_output, Popen, CalledProcessError
+from subprocess import check_call, check_output, Popen, CalledProcessError, PIPE
 from pwd import getpwnam, getpwall
 from grp import getgrnam
-from spwd import getspnam
-from crypt import crypt
 from ConfigParser import ConfigParser
 
 try:
@@ -30,9 +28,10 @@ if dbus is not None:
 else:
 	manager = manager_iface = system_bus = None
 
-from miscwidgets import SelText, TabColumns
+from miscwidgets import SelText, TabColumns, PasswordDialog, TextDialog
 from logins import WhoView
 import utils
+import sessions
 
 #http://www.nicosphere.net/selectable-list-with-urwid-for-python-2542/
 #note: needs to run as root
@@ -311,14 +310,16 @@ def gui_session(username,tty,cmd,ck):
 	else:
 		#this'll be called after the process is done
 		#register here since we have the PID
-		check_call(['sessreg','-a','-l', new_d, username])
+		sessions.register_session(user,new_d)
+		#check_call(['sessreg','-a','-l', new_d, username])
 		#add_utmp_entry(username, new_d, spid)
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		if not check_failed and ck:
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
 		#remove_utmp_entry(new_d)
-		check_call(['sessreg','-d','-l', new_d, username])
+		#check_call(['sessreg','-d','-l', new_d, username])
+		sessions.delete_session(user,new_d)
 		os._exit(status)
 
 def cli_session(username,tty,cmd,fb,img):
@@ -369,7 +370,8 @@ def cli_session(username,tty,cmd,fb,img):
 			#this'll be called after the process is done
 			os._exit(login_prs.returncode)
 	else:
-		check_call(['sessreg','-a','-l',ttytxt,username])
+		#check_call(['sessreg','-a','-l',ttytxt,username])
+		sessions.delete_session(user,ttytxt)
 		#register now that we have the PID
 		#print("Registering session for {} on {}".format(username, ttytxt))
 		status=os.waitpid(pid,os.P_WAIT)[1]
@@ -377,15 +379,15 @@ def cli_session(username,tty,cmd,fb,img):
 		#print("Restoring priveleges")
 		restore_tty(next_console)
 		#print("Restoring tty ownership")
-		check_call(['sessreg','-d','-l',ttytxt, username])
+		#check_call(['sessreg','-d','-l',ttytxt, username])
+		sessions.delete_session(user,ttytxt)
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
 
 def main ():
 	settings = NCDMConfig()
 	def login(username, password, session, ck, fb, img):
-		#check here for root login and bail out if needed
-		#check here for other existing login and switch out
+		#sessions.PAM=None
 		if username == 'root' and not settings.let_root():
 			statusbar.set_text("Root login is forbidden!")
 			return
@@ -399,9 +401,42 @@ def main ():
 							" panel for your session").format(username))
 				return
 		statusbar.set_text("Authenticating login...")
-		encrypted_password = getspnam(username).sp_pwd
-		encrypted_attempt = crypt(password,encrypted_password)
-		if encrypted_attempt == encrypted_password:
+
+		if sessions.check_pw(username,password):
+			msgs,retcode=sessions.check_avail(username)
+			if retcode > 1:
+				statusbar.set_text(msgs)
+				d = TextDialog(msgs,max_h/2,max_w/2,header="Account Expired")
+				d.run(loop.screen,view)
+				return
+			if retcode == 1:
+				max_w,max_h=loop.screen.get_cols_rows()
+				d = TextDialog(msgs,max_h/2,max_w/2,header="Password change required")
+				d.run(loop.screen,view)
+				d = PasswordDialog("Change your password",max_h/2,max_w/2)
+				data = d.run(loop.screen,view)
+				if data[0] != 0:
+					return
+				while data[1] != data[2]:
+					d = PasswordDialog("Change your password (last attempt failed)",
+										max_h/2,max_w/2)
+					data = d.run(loop.screen,view)
+					if data[0] != 0:
+						statusbar.set_text("Didn't password...")
+						return
+				statusbar.set_text("Changing password...")
+				with open(os.devnull, 'rb') as shutup:
+					chpw_prs=Popen(['passwd',username],
+								stdin=PIPE,stdout=shutup,stderr=shutup)
+					chpw_prs.communicate((data[1]+'\n')*2)
+				if chpw_prs.returncode > 0:
+					statusbar.set_text("Password change failed...")
+				else:
+					statusbar.set_text("Done! Login with your new password!")
+				#check here for root login and bail out if needed
+				#check here for other existing login and switch out
+				#change_password(username)
+				return
 			if session is None:
 				statusbar.set_text("Login is correct, but there are no valid sessions")
 				return
@@ -468,7 +503,7 @@ def main ():
 							login_sel.password.edit_text,
 							active_session, login_sel.ck_check.state,
 							login_sel.fb_check.state, img)
-				statusbar.set_text("")
+				#statusbar.set_text("")
 				login_sel.username.edit_text=""
 				login_sel.password.edit_text=""
 			elif panel is asessions_box:
