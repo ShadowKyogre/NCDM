@@ -10,6 +10,7 @@ from subprocess import check_call, check_output, Popen, CalledProcessError, PIPE
 from pwd import getpwnam, getpwall
 from grp import getgrnam
 from ConfigParser import ConfigParser
+import PAM
 
 try:
 	 import dbus
@@ -267,7 +268,7 @@ def prepare_tty(username,n):
 def restore_tty(n):
 	prepare_tty('root',n)
 
-def gui_session(username,tty,cmd,ck):
+def gui_session(username,tty,cmd,ck,auth):
 	ttytxt='tty{}'.format(tty)
 	usr,env=make_child_env(username)
 	active_xs=glob.glob('/tmp/.X*-lock')
@@ -276,7 +277,7 @@ def gui_session(username,tty,cmd,ck):
 	else:
 		last_d=-1
 	new_d=":{}".format(int(last_d)+1)
-	env['DISPLAY']=new_d #we need this only for sessreg purposes
+	env['DISPLAY']=new_d
 	env['TERM']='xterm'
 	check_failed=False
 	cookie=''
@@ -295,6 +296,10 @@ def gui_session(username,tty,cmd,ck):
 		env['XDG_SESSION_COOKIE']=cookie
 	#let startx handle making the authority file
 	totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
+	auth.set_item(PAM.PAM_TTY, new_d)
+	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
+	auth.setcred(PAM.PAM_ESTABLISH_CRED)
+	auth.open_session()
 	#check_call(['startx','/etc/X11/xinitrc',
 	pid = os.fork()
 	if pid == 0:
@@ -308,21 +313,15 @@ def gui_session(username,tty,cmd,ck):
 			login_prs.wait()
 			os._exit(login_prs.returncode)
 	else:
-		#this'll be called after the process is done
-		#register here since we have the PID
-		sessions.register_session(user,new_d)
-		#check_call(['sessreg','-a','-l', new_d, username])
-		#add_utmp_entry(username, new_d, spid)
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		if not check_failed and ck:
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
-		#remove_utmp_entry(new_d)
-		#check_call(['sessreg','-d','-l', new_d, username])
-		sessions.delete_session(user,new_d)
+		auth.close_session()
+		del auth
 		os._exit(status)
 
-def cli_session(username,tty,cmd,fb,img):
+def cli_session(username,tty,cmd,fb,img,auth):
 	ttytxt='tty{}'.format(tty)
 	usr,env=make_child_env(username)
 	prepare_tty(username,tty)
@@ -355,6 +354,10 @@ def cli_session(username,tty,cmd,fb,img):
 			env['TERM']='fbterm'
 			#override TERM variable if fbterm support is officially enabled
 			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
+		auth.set_item(PAM.PAM_TTY, ttytxt)
+		auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
+		auth.setcred(PAM.PAM_ESTABLISH_CRED)
+		auth.open_session()
 		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
@@ -370,17 +373,16 @@ def cli_session(username,tty,cmd,fb,img):
 			#this'll be called after the process is done
 			os._exit(login_prs.returncode)
 	else:
-		#check_call(['sessreg','-a','-l',ttytxt,username])
-		sessions.delete_session(user,ttytxt)
 		#register now that we have the PID
 		#print("Registering session for {} on {}".format(username, ttytxt))
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		#print("Child finished")
 		#print("Restoring priveleges")
-		restore_tty(next_console)
+		restore_tty(tty)
 		#print("Restoring tty ownership")
 		#check_call(['sessreg','-d','-l',ttytxt, username])
-		sessions.delete_session(user,ttytxt)
+		auth.close_session()
+		del auth
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
 
@@ -401,9 +403,9 @@ def main ():
 							" panel for your session").format(username))
 				return
 		statusbar.set_text("Authenticating login...")
-
-		if sessions.check_pw(username,password):
-			msgs,retcode=sessions.check_avail(username)
+		auth,success = sessions.check_pw(username,password)
+		if success:
+			msgs,retcode=sessions.check_avail(username,auth=auth)
 			if retcode > 1:
 				statusbar.set_text(msgs)
 				d = TextDialog(msgs,max_h/2,max_w/2,header="Account Expired")
@@ -452,10 +454,10 @@ def main ():
 					#problem: session is deregistered when login manager exits
 					#input is also funky because the stdin is stolen from the manager
 					if session.tag == 'C':
-						cli_session(username,next_console,session.command,fb,img)
+						cli_session(username,next_console,session.command,fb,img,auth)
 						#kill the daemon process that launched these in here
 					elif session.tag == 'X':
-						gui_session(username,next_console,session.command,ck)
+						gui_session(username,next_console,session.command,ck,auth)
 						#kill the daemon process that launched these in here
 					else:
 						os._exit(1)
