@@ -273,7 +273,7 @@ def gui_session(username,tty,cmd,ck,auth):
 	usr,env=make_child_env(username)
 	active_xs=glob.glob('/tmp/.X*-lock')
 	if len(active_xs) > 0:
-		last_d=os.path.basename(active_xs[-1]).replace('-lock','')[2:]
+		last_d=os.path.basename(active_xs[0]).replace('-lock','')[2:]
 	else:
 		last_d=-1
 	new_d=":{}".format(int(last_d)+1)
@@ -285,6 +285,10 @@ def gui_session(username,tty,cmd,ck,auth):
 	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
 	auth.setcred(PAM.PAM_ESTABLISH_CRED)
 	auth.open_session()
+	for env_var in auth.getenvlist():
+		#try and transfer what we have from PAM to our child env
+		name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
+		env[name]=val
 	if ck:
 		if None in (dbus,manager,manager_iface):
 			check_failed=True
@@ -305,6 +309,7 @@ def gui_session(username,tty,cmd,ck,auth):
 	if pid == 0:
 		os.setsid()
 		#do a check for consolekit goodiness
+		del auth
 		with open(os.devnull, 'rb') as shutup:
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 						cwd=usr.pw_dir, env=env, close_fds=True,
@@ -329,6 +334,10 @@ def cli_session(username,tty,cmd,fb,img,auth):
 	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
 	auth.setcred(PAM.PAM_ESTABLISH_CRED)
 	auth.open_session()
+	for env_var in auth.getenvlist():
+		#try and transfer what we have from PAM to our child env
+		name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
+		env[name]=val
 	pid = os.fork()
 	if pid == 0:
 		os.setsid()
@@ -362,6 +371,7 @@ def cli_session(username,tty,cmd,fb,img,auth):
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
 		with open(os.devnull, 'rb') as shutup:
+			del auth
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 							env=env,cwd=usr.pw_dir,close_fds=True,
 							stdout=shutup,stderr=shutup,
@@ -380,7 +390,6 @@ def cli_session(username,tty,cmd,fb,img,auth):
 		#print("Restoring priveleges")
 		restore_tty(tty)
 		#print("Restoring tty ownership")
-		#check_call(['sessreg','-d','-l',ttytxt, username])
 		auth.close_session()
 		del auth
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
@@ -450,8 +459,6 @@ def main ():
 				if pid == 0:
 					#separate from parent
 					os.setsid()
-					#problem: session is deregistered when login manager exits
-					#input is also funky because the stdin is stolen from the manager
 					if session.tag == 'C':
 						cli_session(username,next_console,session.command,fb,img,auth)
 						#kill the daemon process that launched these in here
