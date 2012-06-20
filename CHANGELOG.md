@@ -2,7 +2,6 @@
 ====
 * Add some dialog for the cases where authentication passes, but the account is already expired
 * Well, add dialog code from WICD
-* Add PAM support if PyPAM is installed (currently turned off and needs patch for pam-lastlog)
 * Override TERM variable to be fbterm if fbterm is enabled for session
 0.1.4 (06/17/2012)
 ====
