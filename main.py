@@ -377,7 +377,7 @@ def cli_session(username,tty,cmd,fb,img):
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		#print("Child finished")
 		#print("Restoring priveleges")
-		restore_tty(next_console)
+		restore_tty(tty)
 		#print("Restoring tty ownership")
 		#check_call(['sessreg','-d','-l',ttytxt, username])
 		sessions.delete_session(user,ttytxt)
