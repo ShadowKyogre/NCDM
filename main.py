@@ -281,6 +281,10 @@ def gui_session(username,tty,cmd,ck,auth):
 	env['TERM']='xterm'
 	check_failed=False
 	cookie=''
+	auth.set_item(PAM.PAM_TTY, new_d)
+	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
+	auth.setcred(PAM.PAM_ESTABLISH_CRED)
+	auth.open_session()
 	if ck:
 		if None in (dbus,manager,manager_iface):
 			check_failed=True
@@ -296,10 +300,6 @@ def gui_session(username,tty,cmd,ck,auth):
 		env['XDG_SESSION_COOKIE']=cookie
 	#let startx handle making the authority file
 	totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
-	auth.set_item(PAM.PAM_TTY, new_d)
-	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
-	auth.setcred(PAM.PAM_ESTABLISH_CRED)
-	auth.open_session()
 	#check_call(['startx','/etc/X11/xinitrc',
 	pid = os.fork()
 	if pid == 0:
@@ -325,6 +325,10 @@ def cli_session(username,tty,cmd,fb,img,auth):
 	ttytxt='tty{}'.format(tty)
 	usr,env=make_child_env(username)
 	prepare_tty(username,tty)
+	auth.set_item(PAM.PAM_TTY, ttytxt)
+	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
+	auth.setcred(PAM.PAM_ESTABLISH_CRED)
+	auth.open_session()
 	pid = os.fork()
 	if pid == 0:
 		os.setsid()
@@ -354,10 +358,6 @@ def cli_session(username,tty,cmd,fb,img,auth):
 			env['TERM']='fbterm'
 			#override TERM variable if fbterm support is officially enabled
 			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
-		auth.set_item(PAM.PAM_TTY, ttytxt)
-		auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
-		auth.setcred(PAM.PAM_ESTABLISH_CRED)
-		auth.open_session()
 		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
@@ -437,7 +437,6 @@ def main ():
 					statusbar.set_text("Done! Login with your new password!")
 				#check here for root login and bail out if needed
 				#check here for other existing login and switch out
-				#change_password(username)
 				return
 			if session is None:
 				statusbar.set_text("Login is correct, but there are no valid sessions")
@@ -464,13 +463,6 @@ def main ():
 						#invalid tag
 				else:
 					pass
-					'''
-					ran = os.waitpid(pid,os.P_NOWAIT)
-					if ran == pid:
-						statusbar.set_text("Login command succeeded")
-					else:
-						statusbar.set_text("Login command failed")
-					'''
 			else:
 				statusbar.set_text('Invalid session tag {}'.format(session.tag))
 		else:

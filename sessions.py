@@ -18,6 +18,7 @@ def mute_conv(auth, query_list, userData):
 		else:
 			return None
 	return resp
+
 def gather_msgs(auth, query_list, userData):
 	resp = []
 	for i in range(len(query_list)):
