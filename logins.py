@@ -2,49 +2,9 @@ from subprocess import check_output
 import re
 import time
 import urwid
-#import utmp
-#from UTMPCONST import *
+import sys
 
 #http://linux.die.net/man/3/logout
-'''
-active_logins = utmp.UtmpRecord(UTMP_FILE)
-logins = utmp.UtmpRecord(WTMP_FILE)
-def add_utmp_entry(username, tty_or_x, pid):
-	now=time.time()
-	sec,usec=divmod(now, 1)
-	usec=usec*1E6
-	entry = utmp.UtmpEntry(ut_type=USER_PROCESS,
-					ut_pid=pid,
-					ut_user=username,
-					ut_id=tty_or_x[-4:],
-					ut_line=tty_or_x,
-					ut_tv=(int(sec),int(usec)))
-	#write host?
-	active_logins.setutent()
-	active_logins.getutid(USER_PROCESS,entry.ut_id)
-	active_logins.pututline(entry)
-	active_logins.endutent() #?
-	logins.setutent()
-	logins.getutid(USER_PROCESS,entry.ut_id)
-	logins.pututline(entry)
-	logins.endutent() #?
-
-def remove_utmp_entry(tty_or_x):
-	active_logins.setutent()
-	entry = active_logins.getutline(tty_or_x)
-	entry.ut_type=DEAD_PROCESS
-	entry.ut_pid=0
-	#entry.ut_line=''
-	entry.ut_user=''
-	entry.ut_host=''
-	now=time.time()
-	sec,usec=divmod(now, 1)
-	usec=usec*1E6
-	entry.ut_tv=(int(sec),int(usec))
-	active_logins.getutid(USER_PROCESS,entry.ut_id)
-	active_logins.pututline(entry)
-	active_logins.endutent() #?
-'''
 
 class WhoItem (urwid.WidgetWrap):
 
@@ -77,7 +37,7 @@ class WhoWalker(urwid.ListWalker):
 	positions returned are (value at position-1, value at poistion) tuples.
 	"""
 	def __init__(self):
-		self.focus = 0L
+		self.focus = 0
 		self.refresh()
 
 	def refresh(self):
@@ -87,8 +47,8 @@ class WhoWalker(urwid.ListWalker):
 					and not re.match('pts/',b.ut_line) ]
 		active_logins.endutent()
 		'''
-		self.entries=filter(lambda w: re.findall('([a-z][-a-z0-9]*)[ ]*((?:tty|:)[0-9]*)',w),
-							check_output(['who']).split('\n')[:-1])
+		out=check_output(['who']).decode(sys.getdefaultencoding()).split('\n')[:-1]
+		self.entries=[w for w in out if re.findall('([a-z][-a-z0-9]*)[ ]*((?:tty|:)[0-9]*)',w)]
 
 	def process_line(self, pos):
 		e=self.entries[pos]
@@ -99,9 +59,10 @@ class WhoWalker(urwid.ListWalker):
 		username, device = re.findall('([a-z][-a-z0-9]*)[ ]*((?:tty|:)[0-9]*)',e)[0]
 		#invalid entry?
 		if re.match(':',device):
-			x_pids=check_output(["pidof","X"])[:-1]
-			x_line=filter(lambda s: ' {}'.format(device) in s,
-					check_output(['ps','p',x_pids]).split('\n')[:-1])[0]
+			x_pids=check_output(["pidof","X"]).decode(sys.getdefaultencoding())[:-1]
+			x_line=[s for s in check_output(['ps','p',x_pids])\
+					.decode(sys.getdefaultencoding()).split('\n')[:-1] \
+					if ' {}'.format(device) in s][0]
 			#terminal=check_output('cut -d\  -f4'.format(device),shell=True)[:-1]
 			#terminal=x_line.split(' ')[3][-1]
 			terminal=re.findall('^[ ]*[0-9]* (tty[0-9]*)[ ]*',x_line)[0][3:]
