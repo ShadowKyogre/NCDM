@@ -310,7 +310,7 @@ def gui_session(username,tty,cmd,ck):
 	else:
 		#this'll be called after the process is done
 		#register here since we have the PID
-		sessions.register_session(user,new_d)
+		sessions.register_session(username,new_d)
 		#check_call(['sessreg','-a','-l', new_d, username])
 		#add_utmp_entry(username, new_d, spid)
 		status=os.waitpid(pid,os.P_WAIT)[1]
@@ -319,7 +319,7 @@ def gui_session(username,tty,cmd,ck):
 			del env['XDG_SESSION_COOKIE']
 		#remove_utmp_entry(new_d)
 		#check_call(['sessreg','-d','-l', new_d, username])
-		sessions.delete_session(user,new_d)
+		sessions.delete_session(username,new_d)
 		os._exit(status)
 
 def cli_session(username,tty,cmd,fb,img):
@@ -371,7 +371,7 @@ def cli_session(username,tty,cmd,fb,img):
 			os._exit(login_prs.returncode)
 	else:
 		#check_call(['sessreg','-a','-l',ttytxt,username])
-		sessions.delete_session(user,ttytxt)
+		sessions.register_session(username,ttytxt)
 		#register now that we have the PID
 		#print("Registering session for {} on {}".format(username, ttytxt))
 		status=os.waitpid(pid,os.P_WAIT)[1]
@@ -380,7 +380,7 @@ def cli_session(username,tty,cmd,fb,img):
 		restore_tty(tty)
 		#print("Restoring tty ownership")
 		#check_call(['sessreg','-d','-l',ttytxt, username])
-		sessions.delete_session(user,ttytxt)
+		sessions.delete_session(username,ttytxt)
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
 
