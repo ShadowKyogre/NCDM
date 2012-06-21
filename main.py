@@ -458,19 +458,20 @@ def main ():
 				d = PasswordDialog("Change your password",max_h/2,max_w/2)
 				data = d.run(loop.screen,view)
 				if data[0] != 0:
+					statusbar.set_text("Didn't change password...")
 					return
 				while data[1] != data[2]:
 					d = PasswordDialog("Change your password (last attempt failed)",
 										max_h/2,max_w/2)
 					data = d.run(loop.screen,view)
 					if data[0] != 0:
-						statusbar.set_text("Didn't password...")
+						statusbar.set_text("Didn't change password...")
 						return
 				statusbar.set_text("Changing password...")
 				with open(os.devnull, 'rb') as shutup:
 					chpw_prs=Popen(['passwd',username],
 								stdin=PIPE,stdout=shutup,stderr=shutup)
-					chpw_prs.communicate((data[1]+'\n')*2)
+					chpw_prs.communicate(((data[1]+'\n')*2).encode(os.sys.getdefaultencoding()))
 				if chpw_prs.returncode > 0:
 					statusbar.set_text("Password change failed...")
 				else:
