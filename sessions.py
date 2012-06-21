@@ -12,11 +12,11 @@ def mute_conv(auth, query_list, userData):
 		elif qtype == PAM.PAM_PROMPT_ECHO_OFF:
 			#val = getpass(query)
 			resp.append(('', 0))
-		elif qtype == PAM.PAM_ERROR_MSG or type == PAM.PAM_TEXT_INFO:
-			print(query)
+		elif qtype == PAM.PAM_ERROR_MSG or qtype == PAM.PAM_TEXT_INFO:
+			#print(query)
 			resp.append(('', 0))
-		#else:
-		#	return None
+		else:
+			return None
 	return resp
 
 def gather_msgs(auth, query_list, userData):
@@ -25,16 +25,16 @@ def gather_msgs(auth, query_list, userData):
 		query, qtype = query_list[i]
 		os.sys.stderr.write(str(qtype)+'\n')
 		if qtype == PAM.PAM_PROMPT_ECHO_ON:
-			userData.append(query)
+			#userData.append(query)
 			resp.append(('', 0))
 		elif qtype == PAM.PAM_PROMPT_ECHO_OFF:
+			#userData.append(query)
+			resp.append(('', 0))
+		elif qtype == PAM.PAM_ERROR_MSG or qtype == PAM.PAM_TEXT_INFO:
 			userData.append(query)
 			resp.append(('', 0))
-		elif qtype == PAM.PAM_ERROR_MSG or type == PAM.PAM_TEXT_INFO:
-			userData.append(query)
-			resp.append(('', 0))
-		#else:
-		#	return None
+		else:
+			return None
 	return resp
 
 def check_avail(username,auth=None):

@@ -9,7 +9,8 @@ from platform import uname,python_version
 from subprocess import check_call, check_output, Popen, CalledProcessError, PIPE
 from pwd import getpwnam, getpwall
 from grp import getgrnam
-from ConfigParser import ConfigParser
+from configparser import ConfigParser
+from io import StringIO
 import PAM
 
 try:
@@ -116,7 +117,7 @@ class LoginDetails(urwid.Pile):
 	def active_session(self):
 		if len(self.group) == 0:
 			return None
-		return filter(lambda x: x.get_state(),self.group)[0]
+		return [x for x in self.group if x.get_state()][0]
 
 #http://www.comptechdoc.org/os/linux/howlinuxworks/linux_hllogin.html
 #https://bugzilla.redhat.com/attachment.cgi?id=510191
@@ -148,26 +149,28 @@ def parse_login_defs():
 def csv_to_list(f):
 	csv_file=open(f)
 	entries=csv.reader(csv_file)
-	entries.next()
+	next(entries)
 	rest=list(entries)
 	csv_file.close()
 	return rest
 
-class FakeSecHead(object):
-	def __init__(self, fp):
-		self.fp = fp
-		self.sechead = '[DEFAULT]\n'
-	def readline(self):
-		if self.sechead:
-			try: return self.sechead
-			finally: self.sechead = None
-		else: return self.fp.readline()
+#http://stackoverflow.com/questions/2885190/using-pythons-configparser-to-read-a-file-without-section-name
+def fake_head(fname):
+	sio=StringIO()
+	sio.write('[DEFAULT]\n')
+	f=open(fname)
+	contents = f.read()
+	sio.write(contents)
+	f.close()
+	sio.seek(0)
+	return sio
 
 class NCDMConfig:
 	def __init__(self):
 		self.sysconf = ConfigParser()
 		#/etc/ncdm/sys.cfg
-		self.sysconf.readfp(FakeSecHead(open('/etc/ncdm/sys.cfg')))
+		self.sysconf.readfp(fake_head('/etc/ncdm/sys.cfg'))
+
 		self.default = {}
 		if os.path.exists(self.sysconf.get('DEFAULT','THEME')):
 			t=open(self.sysconf.get('DEFAULT','THEME'))
@@ -191,7 +194,7 @@ class NCDMConfig:
 					self.user_confs[user.pw_name]['GUI'] = \
 						self.fill_gui(os.path.join(f,'gui.csv'))
 					self.user_confs[user.pw_name]['conf'] = ConfigParser()
-					self.user_confs[user.pw_name]['conf'].readfp(FakeSecHead(open(os.path.join(f,'usr.cfg'))))
+					self.user_confs[user.pw_name]['conf'].readfp(fake_head(os.path.join(f,'usr.cfg')))
 				else:
 					self.user_confs[user.pw_name]['CLI'] = \
 						self.default['CLI']
@@ -204,7 +207,7 @@ class NCDMConfig:
 
 	def greeter_msg(self):
 		kname,node,kver,kdate,_,_=uname()
-		fullos=check_output(['uname','-o'])[:-1]
+		fullos=check_output(['uname','-o']).decode(os.sys.getdefaultencoding())[:-1]
 		pyver=python_version()
 		return self.sysconf.get('DEFAULT',
 					'WELCOME').format(**locals())
@@ -213,8 +216,8 @@ class NCDMConfig:
 		return self.sysconf.get('DEFAULT','LOGIN_ONCE').split(':')
 
 	def greeter_font(self):
-		return filter(lambda f: f[0] == self.sysconf.get('DEFAULT','FONT'),
-				urwid.get_all_fonts())[0][1]
+		return [f for f in urwid.get_all_fonts() if \
+				f[0] == self.sysconf.get('DEFAULT','FONT')][0][1]
 
 	def fill_cli(self, f):
 		if os.path.exists(f):
@@ -309,7 +312,6 @@ def gui_session(username,tty,cmd,ck,auth):
 	if pid == 0:
 		os.setsid()
 		#do a check for consolekit goodiness
-		del auth
 		with open(os.devnull, 'rb') as shutup:
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 						cwd=usr.pw_dir, env=env, close_fds=True,
@@ -323,7 +325,6 @@ def gui_session(username,tty,cmd,ck,auth):
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
 		auth.close_session()
-		del auth
 		os._exit(status)
 
 def cli_session(username,tty,cmd,fb,img,auth):
@@ -346,12 +347,12 @@ def cli_session(username,tty,cmd,fb,img,auth):
 		if fb:
 			try:
 				check_call(['which','fbterm'])
-			except CalledProcessError,e:
+			except CalledProcessError as e:
 				check_failed=True
 
 			try:
 				check_call(['which','fbv'])
-			except CalledProcessError,e:
+			except CalledProcessError as e:
 				check_failed=True
 
 			try:
@@ -371,7 +372,6 @@ def cli_session(username,tty,cmd,fb,img,auth):
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
 		with open(os.devnull, 'rb') as shutup:
-			del auth
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 							env=env,cwd=usr.pw_dir,close_fds=True,
 							stdout=shutup,stderr=shutup,
@@ -391,14 +391,12 @@ def cli_session(username,tty,cmd,fb,img,auth):
 		restore_tty(tty)
 		#print("Restoring tty ownership")
 		auth.close_session()
-		del auth
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
 
 def main ():
 	settings = NCDMConfig()
 	def login(username, password, session, ck, fb, img):
-		#sessions.PAM=None
 		if username == 'root' and not settings.let_root():
 			statusbar.set_text("Root login is forbidden!")
 			return
@@ -450,7 +448,7 @@ def main ():
 			if session is None:
 				statusbar.set_text("Login is correct, but there are no valid sessions")
 				return
-			next_console=check_output(['fgconsole','-n'])[:-1]
+			next_console=check_output(['fgconsole','-n']).decode(os.sys.getdefaultencoding())[:-1]
 			statusbar.set_text(("Initializing session "
 			"on console {}...").format(next_console))
 			#now, use the C or X tags to complete the login
@@ -511,7 +509,7 @@ def main ():
 				active_session=asessions_box.who_list.get_focus()[0]
 				try:
 					check_call(['chvt',str(active_session.tty)])
-				except Exception, e:
+				except Exception as e:
 					statusbar.set_text(str(e.message))
 					statusbar._invalidate()
 		#view.set_header(urwid.AttrWrap(urwid.Text(

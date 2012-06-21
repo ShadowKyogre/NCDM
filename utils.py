@@ -1,12 +1,12 @@
 import glob
-import ConfigParser
+import configparser
 
 def get_gui_sessions():
 	check_here = glob.glob('/usr/share/xsessions/*') + \
 				glob.glob('/etc/X11/sessions/*')
 	sessions=[]
 	for item in check_here:
-		cfg = ConfigParser.ConfigParser()
+		cfg = configparser.ConfigParser()
 		cfg.readfp(open(item))
 		name=cfg.get('Desktop Entry','Name')
 		cmd=cfg.get('Desktop Entry','Exec')

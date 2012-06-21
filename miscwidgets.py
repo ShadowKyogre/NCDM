@@ -29,7 +29,7 @@ class TabColumns(urwid.WidgetWrap):
 			column_list.append(('fixed',len(text),w))
 		column_list.append(urwid.Text((attrtitle,title),align='right'))
 
-		self.tab_map = dict(zip(tab_str,tab_wid))
+		self.tab_map = dict(list(zip(tab_str,tab_wid)))
 		self.active_tab = tab_str[0]
 		self.columns = urwid.Columns(column_list,dividechars=1)
 		#walker   = urwid.SimpleListWalker([self.columns,tab_wid[0]])
@@ -160,7 +160,7 @@ class Dialog2(urwid.WidgetWrap):
 							raise DialogExit(-1)
 						if k:
 							self.unhandled_key( size, k)
-		except DialogExit, e:
+		except DialogExit as e:
 			return self.on_exit( e.args[0] )
 			   
 	def on_exit(self, exitcode):
