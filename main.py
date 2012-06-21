@@ -463,7 +463,7 @@ def main ():
 				with open(os.devnull, 'rb') as shutup:
 					chpw_prs=Popen(['passwd',username],
 								stdin=PIPE,stdout=shutup,stderr=shutup)
-					chpw_prs.communicate((data[1]+'\n')*2)
+					chpw_prs.communicate(((data[1]+'\n')*2).encode(os.sys.getdefaultencoding()))
 				if chpw_prs.returncode > 0:
 					statusbar.set_text("Password change failed...")
 					syslog.syslog(syslog.LOG_INFO,
