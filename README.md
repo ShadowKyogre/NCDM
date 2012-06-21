@@ -18,7 +18,7 @@ Features:
 * Allow setting background image for NCDM if fbterm is told to be used
 
 Dependencies:
-* python2-urwid
+* python-urwid
 * Core python modules: crypt, spwd, pwd, grp, os, re, subprocess, platform, glob, csv
 * xorg-xinit
 * xorg-sessreg
@@ -26,7 +26,7 @@ Dependencies:
 * kbd (for opening a virtual terminal and launching the cli session on there using openvt)
 
 Optional dependencies:
-* python2-dbus
+* python-dbus
 * consolekit
 * fbterm
 * fbv
