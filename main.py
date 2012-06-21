@@ -8,7 +8,6 @@ import csv
 from platform import uname,python_version
 from subprocess import check_call, check_output, Popen, CalledProcessError, PIPE
 from pwd import getpwnam, getpwall
-from grp import getgrnam
 from configparser import ConfigParser
 from io import StringIO
 import PAM
@@ -34,6 +33,7 @@ from miscwidgets import SelText, TabColumns, PasswordDialog, TextDialog
 from logins import WhoView
 import utils
 import sessions
+import syslog
 
 #http://www.nicosphere.net/selectable-list-with-urwid-for-python-2542/
 #note: needs to run as root
@@ -105,14 +105,8 @@ class LoginDetails(urwid.Pile):
 		self.cli_items.extend([urwid.AttrMap(SessionTypeItem(self.group,'C'
 								,s[0],s[1]),'body','focus') for s in clis])
 		confy = settings.user_confs.get(uname,{}).get('conf',settings.sysconf)
-		if confy.has_option('DEFAULT', 'CONSOLEKIT'):
-			self.ck_check.set_state(confy.getboolean('DEFAULT', 'CONSOLEKIT'))
-		else:
-			self.ck_check.set_state(False)
-		if confy.has_option('DEFAULT', 'FBTERM'):
-			self.fb_check.set_state(confy.getboolean('DEFAULT', 'FBTERM'))
-		else:
-			self.fb_check.set_state(False)
+		self.ck_check.set_state(confy.getboolean('DEFAULT', 'CONSOLEKIT',fallback=False))
+		self.fb_check.set_state(confy.getboolean('DEFAULT', 'FBTERM',fallback=False))
 
 	def active_session(self):
 		if len(self.group) == 0:
@@ -121,30 +115,6 @@ class LoginDetails(urwid.Pile):
 
 #http://www.comptechdoc.org/os/linux/howlinuxworks/linux_hllogin.html
 #https://bugzilla.redhat.com/attachment.cgi?id=510191
-
-__ld_line = re.compile(r'^[ \t]*'	  # Initial whitespace
-					   r'([^ \t]+)'	# Variable name
-					   r'[ \t][ \t"]*' # Separator - yes, may have multiple "s
-					   r'(([^"]*)".*'  # Value, case 1 - terminated by "
-					   r'|([^"]*\S)?\s*' # Value, case 2 - only drop trailing \s
-					   r')$')
-
-def parse_login_defs():
-	res = {}
-	with open('/etc/login.defs') as f:
-		for line in f:
-			match = __ld_line.match(line)
-			if match is not None:
-				name = match.group(1)
-				if name.startswith('#'):
-					continue
-				value = match.group(3)
-				if value is None:
-					value = match.group(4)
-					if value is None:
-						value = ''
-				res[name] = value # Override previous definition
-	return res
 
 def csv_to_list(f):
 	csv_file=open(f)
@@ -170,7 +140,7 @@ class NCDMConfig:
 		self.sysconf = ConfigParser()
 		#/etc/ncdm/sys.cfg
 		self.sysconf.readfp(fake_head('/etc/ncdm/sys.cfg'))
-
+		self.prep_logger()
 		self.default = {}
 		if os.path.exists(self.sysconf.get('DEFAULT','THEME')):
 			t=open(self.sysconf.get('DEFAULT','THEME'))
@@ -181,9 +151,9 @@ class NCDMConfig:
 		self.default['CLI']=self.fill_cli('/etc/ncdm/cli.csv')
 		self.default['GUI']=self.fill_gui('/etc/ncdm/gui.csv')
 		self.user_confs = {}
-		uid_min=int(parse_login_defs()['UID_MIN'])
-		uid_max=int(parse_login_defs()['UID_MAX'])
-		sys_uid_min=int(parse_login_defs()['SYS_UID_MIN'])
+		uid_min=int(utils.parse_login_defs()['UID_MIN'])
+		uid_max=int(utils.parse_login_defs()['UID_MAX'])
+		sys_uid_min=int(utils.parse_login_defs()['SYS_UID_MIN'])
 		for user in getpwall():
 			if uid_min <= user.pw_uid <= uid_max or user.pw_uid < sys_uid_min:
 				f = os.path.join(user.pw_dir,'.config/ncdm')
@@ -201,6 +171,31 @@ class NCDMConfig:
 					self.user_confs[user.pw_name]['GUI'] = \
 						self.default['GUI']
 					self.user_confs[user.pw_name]['conf'] = self.sysconf
+
+
+	def prep_logger(self):
+		self.logme = self.sysconf.getboolean('DEFAULT','LOG',fallback=True)
+		if not self.logme:
+			self.log=None
+			return
+		import logging
+		self.logging=logging
+		os.sys.excepthook=self.log_exception
+		self.log = logging.getLogger("ncdm")
+		fhnd = logging.FileHandler('/var/log/ncdm.log')
+		formatter = logging.Formatter('[%(asctime)s - %(levelname)s] - %(message)s')
+		fhnd.setFormatter(formatter)
+		lvl = self.sysconf.get('DEFAULT','LOGLVL',fallback='WARNING')
+		self.log.addHandler(fhnd)
+		lvln=getattr(logging,lvl,logging.WARNING)
+		if not isinstance(lvln,int):
+			syslog.syslog(syslog.INFO,("Specified warning level isn't "
+						"valid, forcing it to be warning"))
+			lvln=logging.WARNING
+		self.log.setLevel(lvln)
+
+	def log_exception(self, *args):
+		self.log.critical("CRITICAL:",exc_info=args)
 
 	def let_root(self):
 		return self.sysconf.getboolean('DEFAULT','ALLOW_ROOT')
@@ -237,49 +232,17 @@ dedicated to stopping sessions started by it, and
 another for launching the process
 '''
 
-def make_child_env(username):
-	usr = getpwnam(username)
-	env = {}
-	env['HOME']=usr.pw_dir
-	env['PWD']=usr.pw_dir
-	# let the wrapper handle setting TERM
-	env['SHELL']=usr.pw_shell
-	env['LOGNAME']=usr.pw_name
-	env['USER']=usr.pw_name
-	env['PATH']=os.getenv('PATH')
-	env['TERM']=os.getenv('TERM')
-	#http://groups.google.com/group/alt.os.linux.debian/browse_thread/thread/1b5ec66456373b99
-	env['MAIL']=os.path.join(parse_login_defs().get('MAIL_DIR'),usr.pw_name)
-	#XAUTHORITY and DISPLAY are X dependent!
-	return usr,env
-
-def drop_privs(username):
-	#we only want to temporarily drop the priveleges
-	#http://comments.gmane.org/gmane.comp.web.paste.user/1641
-	#http://stackoverflow.com/questions/1770209/run-child-processes-as-different-user-from-a-long-running-process
-	def result():
-		usr = getpwnam(username)
-		os.initgroups(username,usr.pw_gid)
-		os.setgid(usr.pw_gid)
-		os.setuid(usr.pw_uid)
-	return result
-
-def prepare_tty(username,n):
-	ttypath=os.path.join("/dev","tty{}".format(n))
-	os.chown(ttypath, getpwnam(username).pw_uid, getgrnam('tty').gr_gid)
-
-def restore_tty(n):
-	prepare_tty('root',n)
-
 def gui_session(username,tty,cmd,ck,auth):
 	ttytxt='tty{}'.format(tty)
-	usr,env=make_child_env(username)
+	if settings.logme:
+		settings.log.info("Preparing {}'s default environment".format(username))
+	usr,env=utils.make_child_env(username)
 	active_xs=glob.glob('/tmp/.X*-lock')
-	if len(active_xs) > 0:
-		last_d=os.path.basename(active_xs[0]).replace('-lock','')[2:]
-	else:
-		last_d=-1
-	new_d=":{}".format(int(last_d)+1)
+	if settings.logme:
+		settings.log.info("Checking for next available X display")
+	new_d=":{}".format(utils.next_x())
+	if settings.logme:
+		settings.log.info("Found display {} for using".format(new_d))
 	env['DISPLAY']=new_d
 	env['TERM']='xterm'
 	check_failed=False
@@ -287,16 +250,30 @@ def gui_session(username,tty,cmd,ck,auth):
 	auth.set_item(PAM.PAM_TTY, new_d)
 	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
 	auth.setcred(PAM.PAM_ESTABLISH_CRED)
-	auth.open_session()
+	if settings.logme:
+		settings.log.info("Registering session "
+				"for {} on {}".format(username, new_d))
+	try:
+		auth.open_session()
+	except PAM.error as e:
+		if settings.logme:
+			settings.log.error(("Unable to register session for {} on {},"
+				" active logins display won't work as expected").format(username,new_d))
 	for env_var in auth.getenvlist():
 		#try and transfer what we have from PAM to our child env
 		name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
 		env[name]=val
+	settings.log.info("Filling {}'s environment with PAM environment values".format(username))
 	if ck:
 		if None in (dbus,manager,manager_iface):
+			if settings.logme:
+				settings.log.warning(("Unable to connect to ConsoleKit,"
+									" disabling consolekit..."))
 			check_failed=True
 	if not check_failed and ck:
 		#open a consolekit session
+		if settings.logme:
+			settings.log.info("Launching consolekit session for {} on {}".format(username, new_d))
 		cookie = manager_iface.OpenSessionWithParameters([
 			('unix-user',usr.pw_uid),
 			('x11-display',new_d),
@@ -307,6 +284,9 @@ def gui_session(username,tty,cmd,ck,auth):
 		env['XDG_SESSION_COOKIE']=cookie
 	#let startx handle making the authority file
 	totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
+	if settings.logme:
+		settings.log.info("Launching {} for {} on {} using {}"\
+					.format(totalcmd, username, new_d, usr.pw_shell))
 	#check_call(['startx','/etc/X11/xinitrc',
 	pid = os.fork()
 	if pid == 0:
@@ -316,29 +296,59 @@ def gui_session(username,tty,cmd,ck,auth):
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 						cwd=usr.pw_dir, env=env, close_fds=True,
 						stdout=shutup,stderr=shutup,
-						preexec_fn=drop_privs(username))
+						preexec_fn=utils.drop_privs(username))
+			if settings.logme:
+				settings.log.debug("Waiting for process to finish")
 			login_prs.wait()
+			if settings.logme:
+				settings.log.debug("Finished with {}".format(login_prs.returncode))
 			os._exit(login_prs.returncode)
 	else:
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		if not check_failed and ck:
+			if settings.logme:
+				settings.log.info("Cleaning up consolekit "
+					"session for {} on {}".format(username, new_d))
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
-		auth.close_session()
+		if settings.logme:
+			settings.log.info("Deregistering session "
+						"for {} on {}".format(username, new_d))
+		try:
+			auth.close_session()
+		except PAM.error as e:
+			if settings.logme:
+				settings.log.error(("Unable to deregister session for {} on {},"
+					" active logins display won't work as expected").format(username,new_d))
+		if settings.logme:
+			settings.log.debug("Exiting watcher process for {} on {}".format(username,new_d))
 		os._exit(status)
 
 def cli_session(username,tty,cmd,fb,img,auth):
 	ttytxt='tty{}'.format(tty)
-	usr,env=make_child_env(username)
-	prepare_tty(username,tty)
+	if settings.logme:
+		settings.log.info("Preparing {}'s default environment".format(username))
+	usr,env=utils.make_child_env(username)
+	if settings.logme:
+		settings.log.info("Preparing {} for {}".format(ttytxt,username))
+	utils.prepare_tty(username,tty)
 	auth.set_item(PAM.PAM_TTY, ttytxt)
 	auth.set_item(PAM.PAM_CONV, sessions.mute_conv)
 	auth.setcred(PAM.PAM_ESTABLISH_CRED)
-	auth.open_session()
+	if settings.logme:
+		settings.log.debug("Registering session "
+				"for {} on {}".format(username, ttytxt))
+	try:
+		auth.open_session()
+	except PAM.error as e:
+		if settings.logme:
+			settings.log.error(("Unable to register session for {} on {},"
+				" active logins display won't work as expected").format(username,ttytxt))
 	for env_var in auth.getenvlist():
 		#try and transfer what we have from PAM to our child env
 		name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
 		env[name]=val
+	settings.log.info("Filling {}'s environment with PAM environment values".format(username))
 	pid = os.fork()
 	if pid == 0:
 		os.setsid()
@@ -348,16 +358,25 @@ def cli_session(username,tty,cmd,fb,img,auth):
 			try:
 				check_call(['which','fbterm'])
 			except CalledProcessError as e:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbterm,'
+									' disabling fbterm support'))
 				check_failed=True
 
 			try:
 				check_call(['which','fbv'])
 			except CalledProcessError as e:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbv,'
+									' disabling fbterm support'))
 				check_failed=True
 
 			try:
 				check_call(['which','fbterm-bi'])
 			except CalledProcessError:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbterm-bi,'
+								' disabling fbterm support'))
 				check_failed=True
 
 			if not check_failed:
@@ -368,6 +387,9 @@ def cli_session(username,tty,cmd,fb,img,auth):
 			env['TERM']='fbterm'
 			#override TERM variable if fbterm support is officially enabled
 			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
+		if settings.logme:
+			settings.log.info("Launching {} for {} on {} using {}"\
+						.format(totalcmd, username, ttytxt, usr.pw_shell))
 		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
@@ -375,26 +397,37 @@ def cli_session(username,tty,cmd,fb,img,auth):
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 							env=env,cwd=usr.pw_dir,close_fds=True,
 							stdout=shutup,stderr=shutup,
-							preexec_fn=drop_privs(username))
-			#print("Waiting for process to finish")
+							preexec_fn=utils.drop_privs(username))
+			if settings.logme:
+				settings.log.debug("Waiting for process to finish")
 			login_prs.wait()
-			#print("Finished with {}".format(login_prs.returncode))
+			if settings.logme:
+				settings.log.debug("Finished with {}".format(login_prs.returncode))
 			#we need to wait for this to finish to log the entry properly
 			#this'll be called after the process is done
 			os._exit(login_prs.returncode)
 	else:
 		#register now that we have the PID
-		#print("Registering session for {} on {}".format(username, ttytxt))
 		status=os.waitpid(pid,os.P_WAIT)[1]
-		#print("Child finished")
-		#print("Restoring priveleges")
-		restore_tty(tty)
-		#print("Restoring tty ownership")
-		auth.close_session()
+		if settings.logme:
+			settings.log.debug("Restoring tty ownership")
+		utils.restore_tty(tty)
+		if settings.logme:
+			settings.log.info("Deregistering session "
+							"for {} on {}".format(username, ttytxt))
+		try:
+			auth.close_session()
+		except PAM.error as e:
+			if settings.logme:
+				settings.log.error(("Unable to deregister session for {} on {},"
+				" active logins display won't work as expected").format(username,ttytxt))
+		if settings.logme:
+			settings.log.debug("Exiting watcher process for {} on {}".format(username,ttytxt))
 		#print("Deregistering session for {} on {}".format(username, ttytxt))
 		os._exit(status)
 
 def main ():
+	global settings
 	settings = NCDMConfig()
 	def login(username, password, session, ck, fb, img):
 		if username == 'root' and not settings.let_root():
@@ -480,6 +513,10 @@ def main ():
 
 	def keystroke (input):
 		if input in ('q', 'Q'):
+			if settings.log is not None:
+				settings.logging.shutdown()
+				#this is perfectly normal since this is the 
+				#only exception that properly closes the program
 			raise urwid.ExitMainLoop()
 
 		if input in ('tab', 'shift tab'):
