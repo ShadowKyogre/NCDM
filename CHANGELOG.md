@@ -1,9 +1,10 @@
-0.1.5 (06/19/2012)
+0.1.5 (06/19-20/2012)
 ====
 * Add some dialog for the cases where authentication passes, but the account is already expired
 * Well, add dialog code from WICD
-* Add PAM support if PyPAM is installed (currently turned off and needs patch for pam-lastlog)
 * Override TERM variable to be fbterm if fbterm is enabled for session
+* Add PAM support
+* Port to Python 3
 0.1.4 (06/17/2012)
 ====
 * Slight fix regarding framebuffer and consolekit enabling
