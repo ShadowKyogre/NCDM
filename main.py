@@ -289,7 +289,7 @@ def gui_session(username,tty,cmd,ck):
 		#this'll be called after the process is done
 		#register here since we have the PID
 		if settings.logme:
-			settings.log.debug("Registering session "
+			settings.log.info("Registering session "
 						"for {} on {}".format(username, new_d))
 		success=sessions.register_session(username,new_d)
 		if settings.logme and not success:
@@ -305,7 +305,7 @@ def gui_session(username,tty,cmd,ck):
 			del env['XDG_SESSION_COOKIE']
 		#remove_utmp_entry(new_d)
 		if settings.logme:
-			settings.log.debug("Deregistering session "
+			settings.log.info("Deregistering session "
 						"for {} on {}".format(username, new_d))
 		success=sessions.delete_session(username,new_d)
 		if settings.logme:
