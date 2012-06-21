@@ -8,9 +8,9 @@ import csv
 from platform import uname,python_version
 from subprocess import check_call, check_output, Popen, CalledProcessError, PIPE
 from pwd import getpwnam, getpwall
-from grp import getgrnam
 from configparser import ConfigParser
 from io import StringIO
+import syslog
 
 try:
 	 import dbus
@@ -104,14 +104,8 @@ class LoginDetails(urwid.Pile):
 		self.cli_items.extend([urwid.AttrMap(SessionTypeItem(self.group,'C'
 								,s[0],s[1]),'body','focus') for s in clis])
 		confy = settings.user_confs.get(uname,{}).get('conf',settings.sysconf)
-		if confy.has_option('DEFAULT', 'CONSOLEKIT'):
-			self.ck_check.set_state(confy.getboolean('DEFAULT', 'CONSOLEKIT'))
-		else:
-			self.ck_check.set_state(False)
-		if confy.has_option('DEFAULT', 'FBTERM'):
-			self.fb_check.set_state(confy.getboolean('DEFAULT', 'FBTERM'))
-		else:
-			self.fb_check.set_state(False)
+		self.ck_check.set_state(confy.getboolean('DEFAULT', 'CONSOLEKIT',fallback=False))
+		self.fb_check.set_state(confy.getboolean('DEFAULT', 'FBTERM',fallback=False))
 
 	def active_session(self):
 		if len(self.group) == 0:
@@ -120,30 +114,6 @@ class LoginDetails(urwid.Pile):
 
 #http://www.comptechdoc.org/os/linux/howlinuxworks/linux_hllogin.html
 #https://bugzilla.redhat.com/attachment.cgi?id=510191
-
-__ld_line = re.compile(r'^[ \t]*'	  # Initial whitespace
-					   r'([^ \t]+)'	# Variable name
-					   r'[ \t][ \t"]*' # Separator - yes, may have multiple "s
-					   r'(([^"]*)".*'  # Value, case 1 - terminated by "
-					   r'|([^"]*\S)?\s*' # Value, case 2 - only drop trailing \s
-					   r')$')
-
-def parse_login_defs():
-	res = {}
-	with open('/etc/login.defs') as f:
-		for line in f:
-			match = __ld_line.match(line)
-			if match is not None:
-				name = match.group(1)
-				if name.startswith('#'):
-					continue
-				value = match.group(3)
-				if value is None:
-					value = match.group(4)
-					if value is None:
-						value = ''
-				res[name] = value # Override previous definition
-	return res
 
 def csv_to_list(f):
 	csv_file=open(f)
@@ -169,7 +139,7 @@ class NCDMConfig:
 		self.sysconf = ConfigParser()
 		#/etc/ncdm/sys.cfg
 		self.sysconf.readfp(fake_head('/etc/ncdm/sys.cfg'))
-
+		self.prep_logger()
 		self.default = {}
 		if os.path.exists(self.sysconf.get('DEFAULT','THEME')):
 			t=open(self.sysconf.get('DEFAULT','THEME'))
@@ -180,9 +150,9 @@ class NCDMConfig:
 		self.default['CLI']=self.fill_cli('/etc/ncdm/cli.csv')
 		self.default['GUI']=self.fill_gui('/etc/ncdm/gui.csv')
 		self.user_confs = {}
-		uid_min=int(parse_login_defs()['UID_MIN'])
-		uid_max=int(parse_login_defs()['UID_MAX'])
-		sys_uid_min=int(parse_login_defs()['SYS_UID_MIN'])
+		uid_min=int(utils.parse_login_defs()['UID_MIN'])
+		uid_max=int(utils.parse_login_defs()['UID_MAX'])
+		sys_uid_min=int(utils.parse_login_defs()['SYS_UID_MIN'])
 		for user in getpwall():
 			if uid_min <= user.pw_uid <= uid_max or user.pw_uid < sys_uid_min:
 				f = os.path.join(user.pw_dir,'.config/ncdm')
@@ -201,22 +171,48 @@ class NCDMConfig:
 						self.default['GUI']
 					self.user_confs[user.pw_name]['conf'] = self.sysconf
 
+	def prep_logger(self):
+		self.logme = self.sysconf.getboolean('DEFAULT','LOG',fallback=True)
+		if not self.logme:
+			self.log=None
+			return
+		import logging
+		self.logging=logging
+		os.sys.excepthook=self.log_exception
+		self.log = logging.getLogger("ncdm")
+		fhnd = logging.FileHandler('/var/log/ncdm.log')
+		formatter = logging.Formatter('[%(asctime)s - %(levelname)s] - %(message)s')
+		fhnd.setFormatter(formatter)
+		lvl = self.sysconf.get('DEFAULT','LOGLVL',fallback='WARNING')
+		self.log.addHandler(fhnd)
+		lvln=getattr(logging,lvl,logging.WARNING)
+		if not isinstance(lvln,int):
+			syslog.syslog(syslog.INFO,("Specified warning level isn't "
+						"valid, forcing it to be warning"))
+			lvln=logging.WARNING
+		self.log.setLevel(lvln)
+
+	def log_exception(self, *args):
+		self.log.critical("CRITICAL:",exc_info=args)
+
 	def let_root(self):
-		return self.sysconf.getboolean('DEFAULT','ALLOW_ROOT')
+		return self.sysconf.getboolean('DEFAULT','ALLOW_ROOT',fallback=True)
 
 	def greeter_msg(self):
 		kname,node,kver,kdate,_,_=uname()
 		fullos=check_output(['uname','-o']).decode(os.sys.getdefaultencoding())[:-1]
 		pyver=python_version()
-		return self.sysconf.get('DEFAULT',
-					'WELCOME').format(**locals())
+		return self.sysconf.get('DEFAULT','WELCOME',
+				fallback="{kname}@{node} - Python {pyver}").format(**locals())
 
 	def login_once(self):
-		return self.sysconf.get('DEFAULT','LOGIN_ONCE').split(':')
+		return self.sysconf.get('DEFAULT','LOGIN_ONCE',
+								fallback='').split(':')
 
 	def greeter_font(self):
 		return [f for f in urwid.get_all_fonts() if \
-				f[0] == self.sysconf.get('DEFAULT','FONT')][0][1]
+				f[0] == self.sysconf.get('DEFAULT','FONT',
+				fallback='Thin 6x6')][0][1]
 
 	def fill_cli(self, f):
 		if os.path.exists(f):
@@ -236,58 +232,30 @@ dedicated to stopping sessions started by it, and
 another for launching the process
 '''
 
-def make_child_env(username):
-	usr = getpwnam(username)
-	env = {}
-	env['HOME']=usr.pw_dir
-	env['PWD']=usr.pw_dir
-	# let the wrapper handle setting TERM
-	env['SHELL']=usr.pw_shell
-	env['LOGNAME']=usr.pw_name
-	env['USER']=usr.pw_name
-	env['PATH']=os.getenv('PATH')
-	env['TERM']=os.getenv('TERM')
-	#http://groups.google.com/group/alt.os.linux.debian/browse_thread/thread/1b5ec66456373b99
-	env['MAIL']=os.path.join(parse_login_defs().get('MAIL_DIR'),usr.pw_name)
-	#XAUTHORITY and DISPLAY are X dependent!
-	return usr,env
-
-def drop_privs(username):
-	#we only want to temporarily drop the priveleges
-	#http://comments.gmane.org/gmane.comp.web.paste.user/1641
-	#http://stackoverflow.com/questions/1770209/run-child-processes-as-different-user-from-a-long-running-process
-	def result():
-		usr = getpwnam(username)
-		os.initgroups(username,usr.pw_gid)
-		os.setgid(usr.pw_gid)
-		os.setuid(usr.pw_uid)
-	return result
-
-def prepare_tty(username,n):
-	ttypath=os.path.join("/dev","tty{}".format(n))
-	os.chown(ttypath, getpwnam(username).pw_uid, getgrnam('tty').gr_gid)
-
-def restore_tty(n):
-	prepare_tty('root',n)
-
 def gui_session(username,tty,cmd,ck):
 	ttytxt='tty{}'.format(tty)
-	usr,env=make_child_env(username)
-	active_xs=glob.glob('/tmp/.X*-lock')
-	if len(active_xs) > 0:
-		last_d=os.path.basename(active_xs[0]).replace('-lock','')[2:]
-	else:
-		last_d=-1
-	new_d=":{}".format(int(last_d)+1)
+	if settings.logme:
+		settings.log.info("Preparing {}'s default environment".format(username))
+	usr,env=utils.make_child_env(username)
+	if settings.logme:
+		settings.log.info("Checking for next available X display")
+	new_d=":{}".format(utils.next_x())
+	if settings.logme:
+		settings.log.info("Found display {} for using".format(new_d))
 	env['DISPLAY']=new_d #we need this only for sessreg purposes
 	env['TERM']='xterm'
 	check_failed=False
 	cookie=''
 	if ck:
 		if None in (dbus,manager,manager_iface):
+			if settings.logme:
+				settings.log.warning(("Unable to connect to ConsoleKit,"
+									" disabling consolekit..."))
 			check_failed=True
 	if not check_failed and ck:
-		#open a consolekit session
+		#open a consolekit sessio
+		if settings.logme:
+			settings.log.info("Launching consolekit session for {} on {}".format(username, new_d))
 		cookie = manager_iface.OpenSessionWithParameters([
 			('unix-user',usr.pw_uid),
 			('x11-display',new_d),
@@ -298,6 +266,9 @@ def gui_session(username,tty,cmd,ck):
 		env['XDG_SESSION_COOKIE']=cookie
 	#let startx handle making the authority file
 	totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
+	if settings.logme:
+		settings.log.info("Launching {} for {} on {} using {}"\
+					.format(totalcmd, username, new_d, usr.pw_shell))
 	#check_call(['startx','/etc/X11/xinitrc',
 	pid = os.fork()
 	if pid == 0:
@@ -307,26 +278,51 @@ def gui_session(username,tty,cmd,ck):
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 						cwd=usr.pw_dir, env=env, close_fds=True,
 						stdout=shutup,stderr=shutup,
-						preexec_fn=drop_privs(username))
+						preexec_fn=utils.drop_privs(username))
+			if settings.logme:
+				settings.log.debug("Waiting for process to finish")
 			login_prs.wait()
+			if settings.logme:
+				settings.log.debug("Finished with {}".format(login_prs.returncode))
 			os._exit(login_prs.returncode)
 	else:
 		#this'll be called after the process is done
 		#register here since we have the PID
-		sessions.register_session(username,new_d)
+		if settings.logme:
+			settings.log.debug("Registering session "
+						"for {} on {}".format(username, new_d))
+		success=sessions.register_session(username,new_d)
+		if settings.logme and not success:
+			settings.log.error(("Unable to register session for {} on {},"
+								" active logins display won't work as expected").format(username,new_d))
 		#add_utmp_entry(username, new_d, spid)
 		status=os.waitpid(pid,os.P_WAIT)[1]
 		if not check_failed and ck:
+			if settings.logme:
+				settings.log.info("Cleaning up consolekit "
+					"session for {} on {}".format(username, new_d))
 			closed = manager_iface.CloseSession(cookie)
 			del env['XDG_SESSION_COOKIE']
 		#remove_utmp_entry(new_d)
-		sessions.delete_session(username,new_d)
+		if settings.logme:
+			settings.log.debug("Deregistering session "
+						"for {} on {}".format(username, new_d))
+		success=sessions.delete_session(username,new_d)
+		if settings.logme:
+			if not success:
+				settings.log.error(("Unable to deregister session for {} on {},"
+					" active logins display won't work as expected").format(username,new_d))
+			settings.log.debug("Exiting watcher process for {} on {}".format(username,new_d))	
 		os._exit(status)
 
 def cli_session(username,tty,cmd,fb,img):
 	ttytxt='tty{}'.format(tty)
-	usr,env=make_child_env(username)
-	prepare_tty(username,tty)
+	if settings.logme:
+		settings.log.info("Preparing {}'s default environment".format(username))
+	usr,env=utils.make_child_env(username)
+	if settings.logme:
+		settings.log.info("Preparing {} for {}".format(ttytxt,username))
+	utils.prepare_tty(username,tty)
 	pid = os.fork()
 	if pid == 0:
 		os.setsid()
@@ -336,16 +332,25 @@ def cli_session(username,tty,cmd,fb,img):
 			try:
 				check_call(['which','fbterm'])
 			except CalledProcessError as e:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbterm,'
+									' disabling fbterm support'))
 				check_failed=True
 
 			try:
 				check_call(['which','fbv'])
 			except CalledProcessError as e:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbv,'
+									' disabling fbterm support'))
 				check_failed=True
 
 			try:
 				check_call(['which','fbterm-bi'])
 			except CalledProcessError:
+				if settings.logme:
+					settings.log.warning(('Unable to find fbterm-bi,'
+								' disabling fbterm support'))
 				check_failed=True
 
 			if not check_failed:
@@ -356,38 +361,57 @@ def cli_session(username,tty,cmd,fb,img):
 			env['TERM']='fbterm'
 			#override TERM variable if fbterm support is officially enabled
 			totalcmd="openvt -ws -- fbterm-bi {} {}".format(img,cmd).strip()
-		#print("Launching {} for {} on {} - {}".format(totalcmd, username, ttytxt, usr.pw_shell))
+		if settings.logme:
+			settings.log.info("Launching {} for {} on {} using {}"\
+						.format(totalcmd, username, ttytxt, usr.pw_shell))
 		#don't clutter the UI with output from what we launched
 		#http://dslinux.gits.kiev.ua/trunk/user/console-tools/src/vttools/openvt.c
 		with open(os.devnull, 'rb') as shutup:
 			login_prs=Popen([usr.pw_shell,'--login','-c',totalcmd],
 							env=env,cwd=usr.pw_dir,close_fds=True,
 							stdout=shutup,stderr=shutup,
-							preexec_fn=drop_privs(username))
-			#print("Waiting for process to finish")
+							preexec_fn=utils.drop_privs(username))
+			if settings.logme:
+				settings.log.debug("Waiting for process to finish")
 			login_prs.wait()
-			#print("Finished with {}".format(login_prs.returncode))
+			if settings.logme:
+				settings.log.debug("Finished with {}".format(login_prs.returncode))
 			#we need to wait for this to finish to log the entry properly
 			#this'll be called after the process is done
 			os._exit(login_prs.returncode)
 	else:
-		sessions.register_session(username,ttytxt)
+		if settings.logme:
+			settings.log.info(("Registering session"
+							" for {} on {}").format(username, ttytxt))
+		success = sessions.register_session(username,ttytxt)
+		if settings.logme and not success:
+			settings.log.error(("Unable to register session for {} on {},"
+								" active logins display won't work as expected").format(username,ttytxt))			
 		#register now that we have the PID
-		#print("Registering session for {} on {}".format(username, ttytxt))
 		status=os.waitpid(pid,os.P_WAIT)[1]
-		#print("Child finished")
-		#print("Restoring priveleges")
-		restore_tty(tty)
-		#print("Restoring tty ownership")
-		sessions.delete_session(username,ttytxt)
-		#print("Deregistering session for {} on {}".format(username, ttytxt))
+		if settings.logme:
+			settings.log.debug("Restoring tty ownership")
+		utils.restore_tty(tty)
+		if settings.logme:
+			settings.log.info("Deregistering session "
+								"for {} on {}".format(username, ttytxt))
+		success = sessions.delete_session(username,ttytxt)
+		if settings.logme:
+			if not success:
+				settings.log.error(("Unable to deregister session for {} on {},"
+					" active logins display won't work as expected").format(username,ttytxt))
+			settings.log.debug("Exiting watcher process for {} on {}".format(username,ttytxt))	
 		os._exit(status)
 
 def main ():
+	global settings
 	settings = NCDMConfig()
 	def login(username, password, session, ck, fb, img):
-		if username == 'root' and not settings.let_root():
+		syslog.openlog('ncdm',syslog.LOG_PID,syslog.LOG_AUTH)
+		if username == getpwnam(username).pw_uid == 0 and not settings.let_root():
 			statusbar.set_text("Root login is forbidden!")
+			syslog.syslog(syslog.LOG_CRIT, ("Failed login attempt as user"
+						" {} occured (root forbidden)").format(username))
 			return
 		if username in settings.login_once():
 			asessions_box.who_list.body.refresh()
@@ -397,6 +421,9 @@ def main ():
 				statusbar.set_text(("Sorry, {}, you're already logged in."
 							"\nLook at the active sessions"
 							" panel for your session").format(username))
+				syslog.syslog(syslog.LOG_WARNING,
+					("Failed login attempt as user {} occured"
+					" (attempted to log in multiple times)").format(username))
 				return
 		statusbar.set_text("Authenticating login...")
 
@@ -406,6 +433,9 @@ def main ():
 				statusbar.set_text(msgs)
 				d = TextDialog(msgs,max_h/2,max_w/2,header="Account Expired")
 				d.run(loop.screen,view)
+				syslog.syslog(syslog.LOG_NOTICE,
+					("Failed login attempt as user {} occured"
+					" (account expired)").format(username))
 				return
 			if retcode == 1:
 				max_w,max_h=loop.screen.get_cols_rows()
@@ -414,13 +444,20 @@ def main ():
 				d = PasswordDialog("Change your password",max_h/2,max_w/2)
 				data = d.run(loop.screen,view)
 				if data[0] != 0:
+					statusbar.set_text("Didn't change your password...")
+					syslog.syslog(syslog.LOG_INFO,
+					("User {} didn't change his/her password"
+					", rejecting login").format(username))
 					return
 				while data[1] != data[2]:
 					d = PasswordDialog("Change your password (last attempt failed)",
 										max_h/2,max_w/2)
 					data = d.run(loop.screen,view)
 					if data[0] != 0:
-						statusbar.set_text("Didn't password...")
+						statusbar.set_text("Didn't change your password...")
+						syslog.syslog(syslog.LOG_INFO
+						("User {} didn't change his/her password"
+						", rejecting login").format(username))
 						return
 				statusbar.set_text("Changing password...")
 				with open(os.devnull, 'rb') as shutup:
@@ -429,14 +466,23 @@ def main ():
 					chpw_prs.communicate((data[1]+'\n')*2)
 				if chpw_prs.returncode > 0:
 					statusbar.set_text("Password change failed...")
+					syslog.syslog(syslog.LOG_INFO,
+					("User {} tried to change his/her password, but it failed").format(username))
 				else:
 					statusbar.set_text("Done! Login with your new password!")
+					syslog.syslog(syslog.LOG_INFO,
+					("User {} changed his/her password").format(username))
 				#check here for root login and bail out if needed
 				#check here for other existing login and switch out
-				#change_password(username)
 				return
+			if retcode == 0 and len(msgs) > 0:
+				max_w,max_h=loop.screen.get_cols_rows()
+				d = TextDialog(msgs,max_h/2,max_w/2,header="Notifications")
+				d.run(loop.screen,view)				
 			if session is None:
 				statusbar.set_text("Login is correct, but there are no valid sessions")
+				syslog.syslog(syslog.LOG_INFO, ("Failed login attempt as user {}"
+					" occured (no valid sessions)").format(username))
 				return
 			next_console=check_output(['fgconsole','-n']).decode(os.sys.getdefaultencoding())[:-1]
 			statusbar.set_text(("Initializing session "
@@ -459,7 +505,8 @@ def main ():
 						os._exit(1)
 						#invalid tag
 				else:
-					pass
+					syslog.syslog(syslog.LOG_INFO, ("Login attempt as user {}"
+						" succeeded, launching their session now").format(username))
 					'''
 					ran = os.waitpid(pid,os.P_NOWAIT)
 					if ran == pid:
@@ -469,8 +516,12 @@ def main ():
 					'''
 			else:
 				statusbar.set_text('Invalid session tag {}'.format(session.tag))
+				syslog.syslog(syslog.LOG_INFO, ("Failed login attempt as user {}"
+					" occured (tried to launch an invalid session)").format(username))
 		else:
 			statusbar.set_text("Login details are incorrect")
+			syslog.syslog(syslog.LOG_INFO, ("Failed login attempt as user {}"
+						" occured (wrong login details given)").format(username))
 
 	def power_button(button, user_data):
 		statusbar.set_text("Doing {} now...".format(button.label.lower()))
@@ -479,6 +530,10 @@ def main ():
 
 	def keystroke (input):
 		if input in ('q', 'Q'):
+			if settings.log is not None:
+				settings.logging.shutdown()
+				#this is perfectly normal since this is the 
+				#only exception that properly closes the program
 			raise urwid.ExitMainLoop()
 
 		if input in ('tab', 'shift tab'):

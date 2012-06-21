@@ -1,3 +1,7 @@
+0.1.6 (06/21/2012
+====
+* Added the ability to log normal operations
+* Log failed login attempts for the shadow-only version
 0.1.5 (06/19-20/2012)
 ====
 * Add some dialog for the cases where authentication passes, but the account is already expired
