@@ -14,12 +14,15 @@ shift
 . /etc/locale.conf
 export LC_CTYPE=${LC_CTYPE:-C}
 
-if [[ -f "${1}" && ${TERM} == "fbterm" ]];then
-	img="${1}"
-	shift
-	exec fbterm-bi ${img} python /usr/share/ncdm/main.py $*
-elif [[ ${TERM} == "fbterm" ]];then
-	exec fbterm python /usr/share/ncdm/main.py $*
+if [[ ${TERM} == "fbterm" ]];then
+	img="$(cat /etc/ncdm/sys.cfg|grep ^FBIMG=|cut -d= -f2-)"
+	if [ -f "$img" ];then
+		exec fbterm-bi ${img} python /usr/share/ncdm/main.py $*
+	else
+		#add a work around in case any splash has set the background img for this terminal
+		export FBTERM_BACKGROUND_IMAGE=1
+		exec fbterm python /usr/share/ncdm/main.py $*
+	fi
 else
 	exec python /usr/share/ncdm/main.py $*
 fi
