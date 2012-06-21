@@ -23,6 +23,7 @@ Dependencies:
 * xorg-xinit
 * xorg-sessreg
 * coreutils
+* grep
 * kbd (for opening a virtual terminal and launching the cli session on there using openvt)
 
 Optional dependencies:
