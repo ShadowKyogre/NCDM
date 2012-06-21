@@ -17,9 +17,9 @@ export LC_CTYPE=${LC_CTYPE:-C}
 if [[ -f "${1}" && ${TERM} == "fbterm" ]];then
 	img="${1}"
 	shift
-	exec fbterm-bi ${img} python2 /usr/share/ncdm/main.py $*
+	exec fbterm-bi ${img} python /usr/share/ncdm/main.py $*
 elif [[ ${TERM} == "fbterm" ]];then
-	exec fbterm python2 /usr/share/ncdm/main.py $*
+	exec fbterm python /usr/share/ncdm/main.py $*
 else
-	exec python2 /usr/share/ncdm/main.py $*
+	exec python /usr/share/ncdm/main.py $*
 fi
