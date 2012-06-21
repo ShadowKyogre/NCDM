@@ -5,6 +5,7 @@
 * Override TERM variable to be fbterm if fbterm is enabled for session
 * Add PAM support
 * Port to Python 3
+* Change FBterm background image support for main screen a little
 0.1.4 (06/17/2012)
 ====
 * Slight fix regarding framebuffer and consolekit enabling
