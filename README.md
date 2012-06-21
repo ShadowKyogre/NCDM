@@ -19,7 +19,7 @@ Features:
 
 Dependencies:
 * python-urwid
-* Core python modules: crypt, spwd, pwd, grp, os, re, subprocess, platform, glob, csv
+* Core python modules: pwd, grp, os, re, subprocess, platform, glob, csv
 * xorg-xinit
 * xorg-sessreg
 * coreutils
