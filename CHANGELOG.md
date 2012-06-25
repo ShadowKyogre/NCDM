@@ -1,3 +1,6 @@
+0.1.7 (06/24/2012)
+====
+* Decoupled UI more from login backend
 0.1.6 (06/21/2012)
 ====
 * Added the ability to log normal operations
