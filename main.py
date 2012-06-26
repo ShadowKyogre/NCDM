@@ -97,17 +97,14 @@ class LoginDetails(urwid.Pile):
 		del self.group[:]
 		del self.gui_items[:]
 		del self.cli_items[:]
-		if not uname in settings.user_confs.keys():
-			return
-		clis = settings.user_confs.get(uname,{}).get('CLI', [])
-		guis = settings.user_confs.get(uname,{}).get('GUI', [])
+		clis = settings.get_cli_sessions(uname)
+		guis = settings.get_gui_sessions(uname)
 		self.gui_items.extend([urwid.AttrMap(SessionTypeItem(self.group,'X'
-								,s[0],s[1]),'body','focus') for s in guis])
+					,s[0],s[1]),'body','focus') for s in guis])
 		self.cli_items.extend([urwid.AttrMap(SessionTypeItem(self.group,'C'
-								,s[0],s[1]),'body','focus') for s in clis])
-		confy = settings.user_confs.get(uname,{}).get('conf',settings.sysconf)
-		self.ck_check.set_state(confy.getboolean('DEFAULT', 'CONSOLEKIT',fallback=False))
-		self.fb_check.set_state(confy.getboolean('DEFAULT', 'FBTERM',fallback=False))
+					,s[0],s[1]),'body','focus') for s in clis])
+		self.ck_check.set_state(settings.get_ck(uname)))
+		self.fb_check.set_state(settings.get_fb(uname)))
 
 	def active_session(self):
 		if len(self.group) == 0:
@@ -193,6 +190,28 @@ class NCDMConfig:
 			lvln=logging.WARNING
 		self.log.setLevel(lvln)
 
+	def get_fbimg(self, uname):
+		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		return confy.get('DEFAULT','FBIMG','')
+
+	def get_ck(self, uname):
+		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		return confy.getboolean('DEFAULT', 'CONSOLEKIT',fallback=False)
+
+	def get_fb(self, uname):
+		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		return confy.getboolean('DEFAULT', 'FBTERM',fallback=False))
+
+	def get_cli_sessions(self, uname):
+		if not uname in self.user_confs.keys():
+			return []
+		return self.user_confs.get(uname,{}).get('CLI', [])
+
+	def get_gui_sessions(self, uname):
+		if not uname in self.user_confs.keys():
+			return []
+		return self.user_confs.get(uname,{}).get('GUI', [])
+
 	def log_exception(self, *args):
 		self.log.critical("CRITICAL:",exc_info=args)
 
@@ -208,7 +227,7 @@ class NCDMConfig:
 
 	def login_once(self):
 		return self.sysconf.get('DEFAULT','LOGIN_ONCE',
-								fallback='').split(':')
+					fallback='').split(':')
 
 	def greeter_font(self):
 		return [f for f in urwid.get_all_fonts() if \
@@ -238,11 +257,14 @@ class NCDMInstance(object):
 		self.settings = NCDMConfig()
 
 	def get_logins(self):
-		out = check_output(['who']).decode(sys.getdefaultencoding()).split('\n')[:-1]
+		out = check_output(['who']).decode(os.sys.getdefaultencoding()).split('\n')[:-1]
 		return [w for w in out if re.findall('([a-z][-a-z0-9]*)[ ]*((?:tty|:)[0-9]*)',w)]
 
 	def login(self, username, password, session, ck, fb, img):
-		syslog.openlog('ncdm',syslog.LOG_PID,syslog.LOG_AUTH)
+		syslog.openlog('ncdm', syslog.LOG_PID, syslog.LOG_AUTH)
+		if username == "":
+			self.put_message("Cannot login! Missing username...")
+			return
 		if username == getpwnam(username).pw_uid == 0 \
 		and not self.settings.let_root():
 			self.put_message("Root login is forbidden!")
@@ -293,8 +315,6 @@ class NCDMInstance(object):
 				if pid == 0:
 					#separate from parent
 					os.setsid()
-					#problem: session is deregistered when login manager exits
-					#input is also funky because the stdin is stolen from the manager
 					if session.tag == 'C':
 						self.cli_session(username,next_console,session.command,fb,img)
 						#kill the daemon process that launched these in here
@@ -385,7 +405,7 @@ class NCDMInstance(object):
 			success=sessions.register_session(username,new_d)
 			if self.settings.logme and not success:
 				self.settings.log.error(("Unable to register session for {} on {},"
-									" active logins display won't work as expected").format(username,new_d))
+					" active logins display won't work as expected").format(username,new_d))
 			#add_utmp_entry(username, new_d, spid)
 			status=os.waitpid(pid,os.P_WAIT)[1]
 			if not check_failed and ck:
@@ -425,7 +445,7 @@ class NCDMInstance(object):
 				except CalledProcessError as e:
 					if self.settings.logme:
 						self.settings.log.warning(('Unable to find fbterm,'
-										' disabling fbterm support'))
+									' disabling fbterm support'))
 					check_failed=True
 	
 				try:
@@ -433,7 +453,7 @@ class NCDMInstance(object):
 				except CalledProcessError as e:
 					if self.settings.logme:
 						self.settings.log.warning(('Unable to find fbv,'
-										' disabling fbterm support'))
+									' disabling fbterm support'))
 					check_failed=True
 	
 				try:
@@ -622,15 +642,11 @@ class NCDMGui(NCDMInstance, urwid.WidgetWrap):
 			panel = self._w.body.tab_map[self._w.body.active_tab]
 			if panel is self.login_sel:
 				active_session=self.login_sel.active_session()
-				if "" == self.login_sel.username.edit_text:
-					self.put_message("Cannot login! Missing username...")
-				else:
-					img=self.settings.user_confs.get(self.login_sel.username.edit_text,
-						{}).get('conf', self.settings.sysconf).get('DEFAULT','FBIMG')
-					self.login(self.login_sel.username.edit_text,
-						self.login_sel.password.edit_text,
-						active_session, self.login_sel.ck_check.state,
-						self.login_sel.fb_check.state, img)
+				img=self.settings.get_fbimg(self.login_sel.username.edit_text)
+				self.login(self.login_sel.username.edit_text,
+					self.login_sel.password.edit_text,
+					active_session, self.login_sel.ck_check.state,
+					self.login_sel.fb_check.state, img)
 				#statusbar.set_text("")
 				self.login_sel.username.edit_text=""
 				self.login_sel.password.edit_text=""
