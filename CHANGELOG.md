@@ -1,6 +1,7 @@
-0.1.7 (06/24/2012)
+0.1.7 (06/24-26/2012)
 ====
 * Decoupled UI more from login backend
+* Explicitly call the user or system's xinitrc
 0.1.6 (06/21/2012)
 ====
 * Added the ability to log normal operations
