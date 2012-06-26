@@ -192,7 +192,7 @@ class NCDMConfig:
 
 	def get_fbimg(self, uname):
 		confy = self.user_confs.get(uname,{}).get('conf',self.sysconf)
-		return confy.get('DEFAULT','FBIMG','')
+		return confy.get('DEFAULT','FBIMG',fallback='')
 
 	def get_ck(self, uname):
 		confy = self.user_confs.get(uname,{}).get('conf',self.sysconf)
