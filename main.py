@@ -260,6 +260,16 @@ class NCDMInstance(object):
 		out = check_output(['who']).decode(os.sys.getdefaultencoding()).split('\n')[:-1]
 		return [w for w in out if re.findall('([a-z][-a-z0-9]*)[ ]*((?:tty|:)[0-9]*)',w)]
 
+	def get_xinit(self, usr, cmd):
+		usrxinit = os.path.join(usr.pw_dir,'.xinitrc')
+		sysxinit = '/etc/X11/xinitrc'
+		if os.path.exists(usrxinit):
+			return "{} {}".format(usrxinit, cmd)
+		elif os.path.exists(sysxinit):
+			return "{} {}".format(sysxinit, cmd)
+		else:
+			return cmd
+
 	def login(self, username, password, session, ck, fb, img):
 		syslog.openlog('ncdm', syslog.LOG_PID, syslog.LOG_AUTH)
 		if username == "":
@@ -376,7 +386,7 @@ class NCDMInstance(object):
 				])
 			env['XDG_SESSION_COOKIE']=cookie
 		#let startx handle making the authority file
-		totalcmd='startx {} -- {}'.format(cmd,new_d).strip()
+		totalcmd='startx {} -- {}'.format(self.get_xinit(usr,session.cmd),new_d).strip()
 		if self.settings.logme:
 			self.settings.log.info("Launching {} for {} on {} using {}"\
 						.format(totalcmd, username, new_d, usr.pw_shell))
