@@ -572,7 +572,8 @@ class NCDMInstance(object):
 		if ptype.upper() not in ("HIBERNATE","SHUTDOWN","SUSPEND","REBOOT"):
 			self.put_message(("Invalid power management"
 					" type specified: {}").format(ptype))
-		pcmd = self.settings.sysconf.get(ptype.upper(),'')
+			return
+		pcmd = self.settings.sysconf.get(ptype.upper(),'/bin/true')
 		self.put_message("Doing {} now...".format(ptype.lower()))
 		with open(os.devnull, 'rb') as shutup:
 			check_call([pcmd], close_fds=True, 
