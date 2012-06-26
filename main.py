@@ -397,7 +397,7 @@ class NCDMInstance(object):
 				])
 			env['XDG_SESSION_COOKIE']=cookie
 		#let startx handle making the authority file
-		totalcmd='startx {} -- {}'.format(self.get_xinit(usr,session.cmd),new_d).strip()
+		totalcmd='startx {} -- {}'.format(self.get_xinit(usr,cmd),new_d).strip()
 		if self.settings.logme:
 			self.settings.log.info("Launching {} for {} on {} using {}"\
 						.format(totalcmd, username, new_d, usr.pw_shell))
