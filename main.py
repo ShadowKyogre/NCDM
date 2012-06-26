@@ -191,15 +191,15 @@ class NCDMConfig:
 		self.log.setLevel(lvln)
 
 	def get_fbimg(self, uname):
-		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		confy = self.user_confs.get(uname,{}).get('conf',self.sysconf)
 		return confy.get('DEFAULT','FBIMG','')
 
 	def get_ck(self, uname):
-		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		confy = self.user_confs.get(uname,{}).get('conf',self.sysconf)
 		return confy.getboolean('DEFAULT', 'CONSOLEKIT',fallback=False)
 
 	def get_fb(self, uname):
-		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
+		confy = self.user_confs.get(uname,{}).get('conf',self.sysconf)
 		return confy.getboolean('DEFAULT', 'FBTERM',fallback=False)
 
 	def get_cli_sessions(self, uname):
