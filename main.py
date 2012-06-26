@@ -104,8 +104,8 @@ class LoginDetails(urwid.Pile):
 					,s[0],s[1]),'body','focus') for s in guis])
 		self.cli_items.extend([urwid.AttrMap(SessionTypeItem(self.group,'C'
 					,s[0],s[1]),'body','focus') for s in clis])
-		self.ck_check.set_state(settings.get_ck(uname)))
-		self.fb_check.set_state(settings.get_fb(uname)))
+		self.ck_check.set_state(settings.get_ck(uname))
+		self.fb_check.set_state(settings.get_fb(uname))
 
 	def active_session(self):
 		if len(self.group) == 0:
@@ -202,7 +202,7 @@ class NCDMConfig:
 
 	def get_fb(self, uname):
 		confy = self.user_confs.get(uname,{}).get('conf',settings.sysconf)
-		return confy.getboolean('DEFAULT', 'FBTERM',fallback=False))
+		return confy.getboolean('DEFAULT', 'FBTERM',fallback=False)
 
 	def get_cli_sessions(self, uname):
 		if not uname in self.user_confs.keys():
@@ -584,35 +584,41 @@ class NCDMInstance(object):
 			syslog.syslog(syslog.LOG_INFO,
 			("User {} changed his/her password").format(username))
 
+	def power(self, ptype):
+		if ptype.upper() not in ("HIBERNATE","SHUTDOWN","SUSPEND","REBOOT"):
+			self.put_message(("Invalid power management"
+					" type specified: {}").format(ptype))
+		pcmd = self.settings.sysconf.get(ptype.upper(),'')
+		self.put_message("Doing {} now...".format(ptype.lower()))
+		with open(os.devnull, 'rb') as shutup:
+			check_call([pcmd], close_fds=True, 
+				stdout=shutup, stderr=shutup)
+
 class NCDMGui(NCDMInstance, urwid.WidgetWrap):
 	def __init__(self):
 		NCDMInstance.__init__(self)
 		self.screen = urwid.raw_display.Screen()
-		self.login_sel = LoginDetails(self.settings, \
-									self.settings.greeter_msg(), \
-									self.settings.greeter_font())
+		self.login_sel = LoginDetails(self.settings, 
+					self.settings.greeter_msg(), 
+					self.settings.greeter_font())
 		self.asessions_box = WhoView()
 	
-		sd_button = urwid.Button("Shutdown",on_press=self.power_button,
-					user_data=self.settings.sysconf.get('DEFAULT','SHUTDOWN'))
-		rbt_button = urwid.Button("Reboot",on_press=self.power_button,
-					user_data=self.settings.sysconf.get('DEFAULT','REBOOT'))
-		hb_button = urwid.Button("Hibernate",on_press=self.power_button,
-					user_data=self.settings.sysconf.get('DEFAULT','HIBERNATE'))
-		sp_button = urwid.Button("Suspend",on_press=self.power_button,
-					user_data=self.settings.sysconf.get('DEFAULT','SUSPEND'))
+		sd_button = urwid.Button("Shutdown",on_press=self.power_button)
+		rbt_button = urwid.Button("Reboot",on_press=self.power_button)
+		hb_button = urwid.Button("Hibernate",on_press=self.power_button)
+		sp_button = urwid.Button("Suspend",on_press=self.power_button)
 		button_box = urwid.GridFlow([urwid.AttrWrap(sd_button,'button','btnfocus'),
-						urwid.AttrWrap(rbt_button,'button','btnfocus'),
-						urwid.AttrWrap(hb_button,'button','btnfocus'),
-						urwid.AttrWrap(sp_button,'button','btnfocus')], \
-						14, 0, 0, 'center')
+					urwid.AttrWrap(rbt_button,'button','btnfocus'),
+					urwid.AttrWrap(hb_button,'button','btnfocus'),
+					urwid.AttrWrap(sp_button,'button','btnfocus')], 
+					14, 0, 0, 'center')
 		
 		self.statusbar = urwid.Text("")
 		footer = urwid.Pile([button_box,urwid.AttrWrap(self.statusbar,'statusbar','statusbar')])
 		#http://lists.excess.org/pipermail/urwid/2008-November/000590.html
 		tabs = TabColumns([urwid.AttrWrap(SelText("Login"), 'tab active', 'focus'),
-						urwid.AttrWrap(SelText("Active Sessions"), 'body', 'focus')],
-						[self.login_sel,self.asessions_box],'NCurses Display Manager')
+				urwid.AttrWrap(SelText("Active Sessions"), 'body', 'focus')],
+				[self.login_sel,self.asessions_box],'NCurses Display Manager')
 		view = urwid.Frame(body=tabs, footer=footer)
 		urwid.WidgetWrap.__init__(self,view)
 	
@@ -673,11 +679,8 @@ class NCDMGui(NCDMInstance, urwid.WidgetWrap):
 				except Exception as e:
 					self.put_message(str(e.message))
 
-	def power_button(button, user_data):
-		self.put_message("Doing {} now...".format(button.label.lower()))
-		with open(os.devnull, 'rb') as shutup:
-			check_call([user_data], close_fds=True, 
-						stdout=shutup, stderr=shutup)
+	def power_button(button):
+		self.power(button.label.lower())
 
 if __name__ == '__main__':
 	interface = NCDMGui()
