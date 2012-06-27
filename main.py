@@ -690,7 +690,7 @@ class NCDMGui(NCDMInstance, urwid.WidgetWrap):
 				except Exception as e:
 					self.put_message(str(e.message))
 
-	def power_button(button):
+	def power_button(self,button):
 		self.power(button.label.lower())
 
 if __name__ == '__main__':
