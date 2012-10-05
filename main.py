@@ -351,7 +351,6 @@ class NCDMInstance(object):
 		if self.settings.logme:
 			self.settings.log.info("Preparing {}'s default environment".format(username))
 		usr,env=utils.make_child_env(username)
-		active_xs=glob.glob('/tmp/.X*-lock')
 		if self.settings.logme:
 			self.settings.log.info("Checking for next available X display")
 		new_d=":{}".format(utils.next_x())
