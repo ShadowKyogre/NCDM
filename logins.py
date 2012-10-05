@@ -1,4 +1,4 @@
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError
 import re
 import time
 import urwid
@@ -77,7 +77,10 @@ class WhoWalker(urwid.ListWalker):
 		if pos < 0 or pos >= len(self.entries) or len(self.entries) == 0:
 			return None, None
 		else:
-			return self.process_line(pos), pos
+			try:
+				return self.process_line(pos), pos
+			except CalledProcessError as e:
+				return None, None
 
 	def get_focus(self):
 		return self._get_at_pos(self.focus)
