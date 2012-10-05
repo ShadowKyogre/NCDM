@@ -1,7 +1,6 @@
 import urwid
 import re
 import os
-import glob
 import json
 import csv
 
