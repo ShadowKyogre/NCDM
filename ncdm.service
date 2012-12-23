@@ -1,0 +1,11 @@
+[Unit]
+Description=NCDM on tty1
+Conflicts=plymouth-quit.service
+After=plymouth-quit.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ncdm linux
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
