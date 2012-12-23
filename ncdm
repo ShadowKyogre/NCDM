@@ -1,7 +1,7 @@
 #!/bin/bash
 #modified from http://www.linuxjournal.com/article/3121
 
-if [[ "${1}" =~ tty[0-9]+ ]];
+if [[ "${1}" =~ tty[0-9]+ ]];then
 	exec 0</dev/${1} 1>/dev/${1} 2>&1
 	shift
 fi
