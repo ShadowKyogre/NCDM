@@ -9,3 +9,8 @@ ExecStart=/usr/bin/ncdm linux
 StandardInput=tty
 StandardOutput=tty
 TTYPath=/dev/tty1
+Restart=on-abort
+
+[Install]
+Alias=ncdm.service
+WantedBy=multi-user.target
