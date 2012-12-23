@@ -373,8 +373,10 @@ class NCDMInstance(object):
 					" active logins display won't work as expected").format(username,new_d))
 		for env_var in auth.getenvlist():
 			#try and transfer what we have from PAM to our child env
-			name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
-			env[name]=val
+			pair=re.findall("([a-zA-Z0-9]_]*)=(.*)",env_var)
+			if pair:
+				name,val=pair
+				env[name]=val
 		self.settings.log.info("Filling {}'s environment with PAM environment values".format(username))
 		if ck:
 			if None in (dbus,manager,manager_iface):
@@ -458,8 +460,11 @@ class NCDMInstance(object):
 					" active logins display won't work as expected").format(username,ttytxt))
 		for env_var in auth.getenvlist():
 			#try and transfer what we have from PAM to our child env
-			name,val=re.findall("([a-zA-Z0-9]_]*)=(.*)")
-			env[name]=val
+                        pair=re.findall("([a-zA-Z0-9]_]*)=(.*)",env_var)
+                        if pair:
+                                name,val=pair
+                                env[name]=val
+
 		self.settings.log.info("Filling {}'s environment with PAM environment values".format(username))
 		pid = os.fork()
 		if pid == 0:
