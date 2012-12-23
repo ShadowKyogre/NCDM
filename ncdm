@@ -1,8 +1,10 @@
 #!/bin/bash
 #modified from http://www.linuxjournal.com/article/3121
 
-exec 0</dev/${1} 1>/dev/${1} 2>&1
-shift
+if [[ "${1}" =~ tty[0-9]+ ]];
+	exec 0</dev/${1} 1>/dev/${1} 2>&1
+	shift
+fi
 #pretty up the tty under it
 clear
 
