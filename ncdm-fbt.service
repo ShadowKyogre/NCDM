@@ -5,11 +5,11 @@ After=plymouth-quit.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ncdm fbterm
+ExecStart=/usr/bin/ncdm tty1 fbterm
 StandardInput=tty
 StandardOutput=tty
 TTYPath=/dev/tty1
-Restart=on-abort
+Restart=always
 
 [Install]
 Alias=ncdm.service

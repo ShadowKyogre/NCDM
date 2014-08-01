@@ -63,7 +63,7 @@ def check_avail(username):
 		#show a box to the user to tell them their pw expired
 		return '\n'.join(msgs),2
 	
-	if deltapw > usr.sp_max and sp.max != -1:
+	if deltapw > usr.sp_max and usr.sp_max != -1:
 		#this was because of aging
 		#show a box to user to change pw or remind them
 		msgs.append(("You are required to change your "
